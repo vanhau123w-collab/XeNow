@@ -1,0 +1,104 @@
+<!DOCTYPE html>
+<html xmlns:th="http://www.thymeleaf.org">
+<head>
+    <meta charset="UTF-8">
+    <title>Admin Dashboard - DrivEasy</title>
+    <link rel="stylesheet" th:href="@{/css/style.css}">
+</head>
+<body>
+<div class="admin-layout">
+    <!-- Sidebar -->
+    <div class="sidebar">
+        <div class="sidebar-brand">🚗 DrivEasy Admin</div>
+        <a class="sidebar-link active" th:href="@{/admin/dashboard}">📊 Dashboard</a>
+        <a class="sidebar-link" th:href="@{/admin/bookings}">📋 Đơn đặt xe</a>
+        <a class="sidebar-link" th:href="@{/admin/vehicles}">🚗 Quản lý xe</a>
+        <a class="sidebar-link" th:href="@{/admin/customers}">👥 Khách hàng</a>
+        <a class="sidebar-link" th:href="@{/}">🌐 Trang chủ</a>
+        <form th:action="@{/logout}" method="post" style="margin:1.5rem 1rem 0">
+            <button type="submit" class="btn btn-outline" style="width:100%;color:rgba(255,255,255,0.6);border-color:rgba(255,255,255,0.2)">Đăng xuất</button>
+        </form>
+    </div>
+
+    <!-- Content -->
+    <div class="admin-content">
+        <div class="page-header">
+            <div class="page-title">📊 Tổng quan hệ thống</div>
+            <div class="page-subtitle">Thống kê hoạt động cho mượn xe</div>
+        </div>
+
+        <!-- Stats -->
+        <div class="grid grid-4 mb-3">
+            <div class="stat-card">
+                <div class="stat-icon blue">🚗</div>
+                <div>
+                    <div class="stat-value" th:text="${totalVehicles}">0</div>
+                    <div class="stat-label">Tổng số xe</div>
+                </div>
+            </div>
+            <div class="stat-card">
+                <div class="stat-icon green">✅</div>
+                <div>
+                    <div class="stat-value" th:text="${availableVehicles}">0</div>
+                    <div class="stat-label">Xe đang sẵn sàng</div>
+                </div>
+            </div>
+            <div class="stat-card">
+                <div class="stat-icon yellow">⏳</div>
+                <div>
+                    <div class="stat-value" th:text="${pendingBookings}">0</div>
+                    <div class="stat-label">Chờ duyệt</div>
+                </div>
+            </div>
+            <div class="stat-card">
+                <div class="stat-icon red">🔄</div>
+                <div>
+                    <div class="stat-value" th:text="${ongoingBookings}">0</div>
+                    <div class="stat-label">Đang cho thuê</div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Recent Bookings -->
+        <div class="card">
+            <div class="card-body" style="padding-bottom:0">
+                <div class="d-flex justify-between align-center mb-2">
+                    <strong>📋 Đơn đặt gần đây</strong>
+                    <a th:href="@{/admin/bookings}" class="btn btn-outline btn-sm">Xem tất cả</a>
+                </div>
+            </div>
+            <table class="table">
+                <thead>
+                <tr>
+                    <th>Mã đơn</th>
+                    <th>Khách hàng</th>
+                    <th>Xe</th>
+                    <th>Ngày đặt</th>
+                    <th>Tổng tiền</th>
+                    <th>Trạng thái</th>
+                </tr>
+                </thead>
+                <tbody>
+                <tr th:each="b, stat : ${recentBookings}" th:if="${stat.index < 10}">
+                    <td><strong th:text="'#' + b.bookingId"></strong></td>
+                    <td th:text="${b.customer.name}"></td>
+                    <td th:text="${b.vehicle.brand + ' ' + b.vehicle.model}"></td>
+                    <td th:text="${#temporals.format(b.createdAt, 'dd/MM/yyyy')}"></td>
+                    <td th:text="${b.totalPrice != null ? #numbers.formatDecimal(b.totalPrice, 0, 'COMMA', 0, 'POINT') + ' ₫' : '--'}"></td>
+                    <td>
+                        <span th:switch="${b.status.name()}">
+                            <span th:case="'Pending'" class="badge badge-warning">⏳ Chờ duyệt</span>
+                            <span th:case="'Confirmed'" class="badge badge-info">✅ Xác nhận</span>
+                            <span th:case="'Ongoing'" class="badge badge-purple">🚗 Đang thuê</span>
+                            <span th:case="'Finished'" class="badge badge-success">✔ Xong</span>
+                            <span th:case="'Cancelled'" class="badge badge-danger">✖ Hủy</span>
+                        </span>
+                    </td>
+                </tr>
+                </tbody>
+            </table>
+        </div>
+    </div>
+</div>
+</body>
+</html>

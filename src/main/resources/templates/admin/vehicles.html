@@ -1,0 +1,81 @@
+<!DOCTYPE html>
+<html xmlns:th="http://www.thymeleaf.org">
+<head>
+    <meta charset="UTF-8">
+    <title>Quản lý xe - DrivEasy Admin</title>
+    <link rel="stylesheet" th:href="@{/css/style.css}">
+</head>
+<body>
+<div class="admin-layout">
+    <div class="sidebar">
+        <div class="sidebar-brand">🚗 DrivEasy Admin</div>
+        <a class="sidebar-link" th:href="@{/admin/dashboard}">📊 Dashboard</a>
+        <a class="sidebar-link" th:href="@{/admin/bookings}">📋 Đơn đặt xe</a>
+        <a class="sidebar-link active" th:href="@{/admin/vehicles}">🚗 Quản lý xe</a>
+        <a class="sidebar-link" th:href="@{/admin/customers}">👥 Khách hàng</a>
+        <a class="sidebar-link" th:href="@{/}">🌐 Trang chủ</a>
+    </div>
+
+    <div class="admin-content">
+        <div class="page-header d-flex justify-between align-center">
+            <div>
+                <div class="page-title">🚗 Quản lý xe</div>
+                <div class="page-subtitle">Theo dõi và cập nhật trạng thái hạm đội xe</div>
+            </div>
+        </div>
+
+        <div th:if="${success}" class="alert alert-success" th:text="${success}"></div>
+
+        <div class="card">
+            <div class="card-body" style="padding:0">
+                <table class="table">
+                    <thead>
+                    <tr>
+                        <th>ID</th>
+                        <th>Xe</th>
+                        <th>Biển số</th>
+                        <th>Loại xe</th>
+                        <th>Chi nhánh</th>
+                        <th>Giá/ngày</th>
+                        <th>Trạng thái</th>
+                        <th>Hành động</th>
+                    </tr>
+                    </thead>
+                    <tbody>
+                    <tr th:each="v : ${vehicles}">
+                        <td th:text="${v.vehicleId}"></td>
+                        <td>
+                            <div th:text="${v.brand + ' ' + v.model}"></div>
+                            <div class="text-muted" th:text="${v.color != null ? v.color : ''}"></div>
+                        </td>
+                        <td><strong th:text="${v.licensePlate}"></strong></td>
+                        <td th:text="${v.type.typeName}"></td>
+                        <td th:text="${v.location != null ? v.location.city : 'N/A'}"></td>
+                        <td th:text="${#numbers.formatDecimal(v.dailyRate, 0, 'COMMA', 0, 'POINT') + ' ₫'}"></td>
+                        <td>
+                            <span th:switch="${v.status.name()}">
+                                <span th:case="'Available'" class="badge badge-success">✅ Sẵn sàng</span>
+                                <span th:case="'Rented'" class="badge badge-purple">🚗 Đang thuê</span>
+                                <span th:case="'Maintenance'" class="badge badge-warning">🔧 Bảo trì</span>
+                                <span th:case="'OutOfService'" class="badge badge-danger">⛔ Ngừng HĐ</span>
+                            </span>
+                        </td>
+                        <td>
+                            <form th:action="@{/admin/vehicles/{id}/status(id=${v.vehicleId})}" method="post" class="d-flex" style="gap:0.3rem">
+                                <select name="status" class="form-control" style="width:auto;padding:0.3rem 0.6rem;font-size:0.8rem">
+                                    <option value="Available">✅ Sẵn sàng</option>
+                                    <option value="Maintenance">🔧 Bảo trì</option>
+                                    <option value="OutOfService">⛔ Ngừng HĐ</option>
+                                </select>
+                                <button class="btn btn-primary btn-sm">Cập nhật</button>
+                            </form>
+                        </td>
+                    </tr>
+                    </tbody>
+                </table>
+            </div>
+        </div>
+    </div>
+</div>
+</body>
+</html>

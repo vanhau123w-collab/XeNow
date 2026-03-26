@@ -1,0 +1,92 @@
+<!DOCTYPE html>
+<html xmlns:th="http://www.thymeleaf.org" xmlns:sec="http://www.thymeleaf.org/extras/spring-security">
+<head>
+    <meta charset="UTF-8">
+    <title>DrivEasy - Cho mượn xe</title>
+    <link rel="stylesheet" th:href="@{/css/style.css}">
+</head>
+<body>
+
+<!-- Navbar -->
+<nav class="navbar">
+    <a class="navbar-brand" th:href="@{/}"><span>🚗</span> DrivEasy</a>
+    <ul class="navbar-nav">
+        <li><a class="nav-link active" th:href="@{/}">Trang chủ</a></li>
+        <li sec:authorize="isAuthenticated()">
+            <a class="nav-link" th:href="@{/bookings/my-bookings}">Đơn của tôi</a>
+        </li>
+        <li sec:authorize="hasRole('MANAGER')">
+            <a class="nav-link" th:href="@{/admin/dashboard}">⚙ Quản lý</a>
+        </li>
+        <li sec:authorize="isAnonymous()">
+            <a class="btn btn-outline btn-sm" th:href="@{/login}">Đăng nhập</a>
+        </li>
+        <li sec:authorize="isAnonymous()">
+            <a class="btn btn-primary btn-sm" th:href="@{/register}">Đăng ký</a>
+        </li>
+        <li sec:authorize="isAuthenticated()">
+            <span class="text-muted" style="font-size:0.85rem;" sec:authentication="name"></span>
+        </li>
+        <li sec:authorize="isAuthenticated()">
+            <form th:action="@{/logout}" method="post" style="margin:0">
+                <button type="submit" class="btn btn-outline btn-sm">Đăng xuất</button>
+            </form>
+        </li>
+    </ul>
+</nav>
+
+<!-- Hero -->
+<div class="hero">
+    <div class="container">
+        <h1>🚀 Thuê xe nhanh - Đi xa thoải mái</h1>
+        <p>Hơn 100+ xe đang chờ bạn. Đặt xe chỉ trong vài giây!</p>
+    </div>
+</div>
+
+<!-- Filter -->
+<div class="container">
+    <div class="filter-bar">
+        <strong>Lọc theo loại xe:</strong>
+        <a class="btn btn-sm" th:classappend="${selectedType == null} ? 'btn-primary' : 'btn-outline'" th:href="@{/}">Tất cả</a>
+        <th:block th:each="type : ${vehicleTypes}">
+            <a class="btn btn-sm"
+               th:classappend="${selectedType != null and selectedType == type.typeId} ? 'btn-primary' : 'btn-outline'"
+               th:href="@{/(typeId=${type.typeId})}"
+               th:text="${type.typeName}">Loại xe</a>
+        </th:block>
+    </div>
+
+    <!-- Alert -->
+    <div th:if="${session.SPRING_SECURITY_LAST_EXCEPTION}" class="alert alert-danger">
+        Vui lòng đăng nhập để đặt xe!
+    </div>
+
+    <!-- Vehicle Grid -->
+    <div class="grid grid-3 mb-3" th:if="${not #lists.isEmpty(vehicles)}">
+        <div class="card" th:each="vehicle : ${vehicles}">
+            <div style="height:180px;background:linear-gradient(135deg,#DBEAFE,#EDE9FE);display:flex;align-items:center;justify-content:center;font-size:4rem;">
+                🚗
+            </div>
+            <div class="card-body">
+                <span class="badge badge-success mb-1" th:text="${vehicle.type.typeName}">Loại xe</span>
+                <div class="card-title" th:text="${vehicle.brand + ' ' + vehicle.model}">Tên xe</div>
+                <div class="text-muted mb-1">
+                    📍 <span th:text="${vehicle.location != null ? vehicle.location.city : 'N/A'}">TP.HCM</span>
+                    &nbsp;|&nbsp; 🏷 <span th:text="${vehicle.licensePlate}">51A-123</span>
+                </div>
+                <div class="d-flex justify-between align-center mt-2">
+                    <div class="price-tag" th:text="${#numbers.formatDecimal(vehicle.dailyRate, 0, 'COMMA', 0, 'POINT') + ' ₫/ngày'}">500,000 ₫/ngày</div>
+                    <a th:href="@{/vehicles/{id}(id=${vehicle.vehicleId})}" class="btn btn-primary btn-sm">Đặt xe</a>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <div th:if="${#lists.isEmpty(vehicles)}" class="text-center p-3" style="color:var(--gray)">
+        <div style="font-size:3rem">🔍</div>
+        <p>Không có xe nào đang trống. Vui lòng thử loại khác.</p>
+    </div>
+</div>
+
+</body>
+</html>

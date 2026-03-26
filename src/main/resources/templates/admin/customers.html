@@ -1,0 +1,45 @@
+<!DOCTYPE html>
+<html xmlns:th="http://www.thymeleaf.org">
+<head>
+    <meta charset="UTF-8">
+    <title>Khách hàng - DrivEasy Admin</title>
+    <link rel="stylesheet" th:href="@{/css/style.css}">
+</head>
+<body>
+<div class="admin-layout">
+    <div class="sidebar">
+        <div class="sidebar-brand">🚗 DrivEasy Admin</div>
+        <a class="sidebar-link" th:href="@{/admin/dashboard}">📊 Dashboard</a>
+        <a class="sidebar-link" th:href="@{/admin/bookings}">📋 Đơn đặt xe</a>
+        <a class="sidebar-link" th:href="@{/admin/vehicles}">🚗 Quản lý xe</a>
+        <a class="sidebar-link active" th:href="@{/admin/customers}">👥 Khách hàng</a>
+        <a class="sidebar-link" th:href="@{/}">🌐 Trang chủ</a>
+    </div>
+    <div class="admin-content">
+        <div class="page-header">
+            <div class="page-title">👥 Danh sách khách hàng</div>
+        </div>
+        <div class="card">
+            <div class="card-body" style="padding:0">
+                <table class="table">
+                    <thead>
+                    <tr><th>ID</th><th>Họ tên</th><th>Email</th><th>Điện thoại</th><th>CCCD</th><th>Bằng lái</th><th>Trạng thái</th></tr>
+                    </thead>
+                    <tbody>
+                    <tr th:each="c : ${customers}">
+                        <td th:text="${c.customerId}"></td>
+                        <td th:text="${c.name}"></td>
+                        <td th:text="${c.email}"></td>
+                        <td th:text="${c.phone}"></td>
+                        <td th:text="${c.nationalId}"></td>
+                        <td th:text="${c.driverLicense}"></td>
+                        <td><span th:if="${c.active}" class="badge badge-success">Hoạt động</span></td>
+                    </tr>
+                    </tbody>
+                </table>
+            </div>
+        </div>
+    </div>
+</div>
+</body>
+</html>

@@ -1,0 +1,60 @@
+<!DOCTYPE html>
+<html xmlns:th="http://www.thymeleaf.org">
+<head>
+    <meta charset="UTF-8">
+    <title>Đăng ký - DrivEasy</title>
+    <link rel="stylesheet" th:href="@{/css/style.css}">
+</head>
+<body>
+<div class="auth-wrapper">
+    <div class="auth-card" style="max-width:500px">
+        <div class="text-center mb-3">
+            <div style="font-size:2.5rem">🆕</div>
+            <h2>Tạo tài khoản</h2>
+            <p class="subtitle">Điền thông tin để đăng ký khách hàng mới</p>
+        </div>
+
+        <div th:if="${error}" class="alert alert-danger" th:text="${error}"></div>
+
+        <form th:action="@{/register}" method="post">
+            <div class="form-group">
+                <label class="form-label">Họ và tên</label>
+                <input type="text" name="name" class="form-control" placeholder="Nguyễn Văn A" required>
+            </div>
+            <div class="form-group">
+                <label class="form-label">Email</label>
+                <input type="email" name="email" class="form-control" placeholder="email@example.com" required>
+            </div>
+            <div class="form-group">
+                <label class="form-label">Mật khẩu</label>
+                <input type="password" name="passwordHash" class="form-control" placeholder="Ít nhất 6 ký tự" required minlength="6">
+            </div>
+            <div class="grid" style="grid-template-columns:1fr 1fr;gap:1rem">
+                <div class="form-group">
+                    <label class="form-label">Số điện thoại</label>
+                    <input type="tel" name="phone" class="form-control" placeholder="0912345678">
+                </div>
+                <div class="form-group">
+                    <label class="form-label">CCCD</label>
+                    <input type="text" name="nationalId" class="form-control" placeholder="0123456789">
+                </div>
+                <div class="form-group">
+                    <label class="form-label">Số bằng lái xe</label>
+                    <input type="text" name="driverLicense" class="form-control" placeholder="B2-XXXXXXXX">
+                </div>
+                <div class="form-group">
+                    <label class="form-label">Hạn bằng lái</label>
+                    <input type="date" name="licenseExpiry" class="form-control">
+                </div>
+            </div>
+            <button type="submit" class="btn btn-primary" style="width:100%;justify-content:center;padding:0.75rem">
+                ✅ Đăng ký
+            </button>
+        </form>
+        <p class="text-center mt-2" style="font-size:0.9rem">
+            Đã có tài khoản? <a th:href="@{/login}" style="color:var(--primary)">Đăng nhập</a>
+        </p>
+    </div>
+</div>
+</body>
+</html>

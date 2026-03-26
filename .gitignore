@@ -1,0 +1,20 @@
+target/
+!.mvn/wrapper/maven-wrapper.jar
+/cp_*.stat
+.vscode/
+.idea/
+*.iml
+*.iws
+.project
+.settings/
+.classpath
+bin/
+*.rar
+*.zip
+*.tar.gz
+*.7z
+# Log files
+*.log
+# OS generated files
+.DS_Store
+Thumbs.db

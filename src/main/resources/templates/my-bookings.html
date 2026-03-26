@@ -1,0 +1,76 @@
+<!DOCTYPE html>
+<html xmlns:th="http://www.thymeleaf.org">
+<head>
+    <meta charset="UTF-8">
+    <title>Đơn đặt xe của tôi - DrivEasy</title>
+    <link rel="stylesheet" th:href="@{/css/style.css}">
+</head>
+<body>
+<nav class="navbar">
+    <a class="navbar-brand" th:href="@{/}"><span>🚗</span> DrivEasy</a>
+    <ul class="navbar-nav">
+        <li><a class="nav-link" th:href="@{/}">Trang chủ</a></li>
+        <li><a class="nav-link active" th:href="@{/bookings/my-bookings}">Đơn của tôi</a></li>
+        <li>
+            <form th:action="@{/logout}" method="post" style="margin:0">
+                <button type="submit" class="btn btn-outline btn-sm">Đăng xuất</button>
+            </form>
+        </li>
+    </ul>
+</nav>
+
+<div class="container mt-4">
+    <div class="page-header d-flex justify-between align-center">
+        <div>
+            <div class="page-title">🗓 Đơn đặt xe của tôi</div>
+            <div class="page-subtitle">Theo dõi tình trạng các đơn thuê xe</div>
+        </div>
+        <a th:href="@{/}" class="btn btn-primary">+ Đặt thêm xe</a>
+    </div>
+
+    <div th:if="${success}" class="alert alert-success" th:text="${success}"></div>
+
+    <div class="card">
+        <div class="card-body" style="padding:0">
+            <table class="table">
+                <thead>
+                <tr>
+                    <th>Mã đơn</th>
+                    <th>Xe</th>
+                    <th>Ngày nhận</th>
+                    <th>Ngày trả</th>
+                    <th>Đơn giá/ngày</th>
+                    <th>Tổng tiền</th>
+                    <th>Trạng thái</th>
+                </tr>
+                </thead>
+                <tbody>
+                <tr th:each="b : ${bookings}">
+                    <td><strong th:text="'#' + b.bookingId"></strong></td>
+                    <td th:text="${b.vehicle.brand + ' ' + b.vehicle.model}"></td>
+                    <td th:text="${#temporals.format(b.startDate, 'dd/MM/yyyy')}"></td>
+                    <td th:text="${#temporals.format(b.endDate, 'dd/MM/yyyy')}"></td>
+                    <td th:text="${#numbers.formatDecimal(b.vehicle.dailyRate, 0, 'COMMA', 0, 'POINT') + ' ₫'}"></td>
+                    <td th:text="${b.totalPrice != null ? #numbers.formatDecimal(b.totalPrice, 0, 'COMMA', 0, 'POINT') + ' ₫' : 'Đang tính'}"></td>
+                    <td>
+                        <span th:switch="${b.status.name()}">
+                            <span th:case="'Pending'" class="badge badge-warning">⏳ Chờ duyệt</span>
+                            <span th:case="'Confirmed'" class="badge badge-info">✅ Đã xác nhận</span>
+                            <span th:case="'Ongoing'" class="badge badge-purple">🚗 Đang thuê</span>
+                            <span th:case="'Finished'" class="badge badge-success">✔ Hoàn thành</span>
+                            <span th:case="'Cancelled'" class="badge badge-danger">✖ Đã hủy</span>
+                        </span>
+                    </td>
+                </tr>
+                <tr th:if="${#lists.isEmpty(bookings)}">
+                    <td colspan="7" class="text-center" style="padding:3rem;color:var(--gray)">
+                        Bạn chưa có đơn đặt xe nào. <a th:href="@{/}">Đặt ngay!</a>
+                    </td>
+                </tr>
+                </tbody>
+            </table>
+        </div>
+    </div>
+</div>
+</body>
+</html>

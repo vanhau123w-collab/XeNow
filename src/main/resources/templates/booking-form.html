@@ -1,0 +1,82 @@
+<!DOCTYPE html>
+<html xmlns:th="http://www.thymeleaf.org">
+<head>
+    <meta charset="UTF-8">
+    <title>Đặt xe - DrivEasy</title>
+    <link rel="stylesheet" th:href="@{/css/style.css}">
+</head>
+<body>
+<nav class="navbar">
+    <a class="navbar-brand" th:href="@{/}"><span>🚗</span> DrivEasy</a>
+    <ul class="navbar-nav">
+        <li><a class="nav-link" th:href="@{/}">← Quay lại</a></li>
+    </ul>
+</nav>
+
+<div class="container mt-4" style="max-width:800px">
+    <div th:if="${error}" class="alert alert-danger" th:text="${error}"></div>
+
+    <!-- Vehicle Info -->
+    <div class="card mb-3">
+        <div class="card-body d-flex align-center gap-1" style="gap:1.5rem">
+            <div style="font-size:4rem">🚗</div>
+            <div>
+                <div class="card-title" th:text="${vehicle.brand + ' ' + vehicle.model}"></div>
+                <div class="text-muted">Biển số: <strong th:text="${vehicle.licensePlate}"></strong></div>
+                <div class="price-tag mt-1" th:text="${#numbers.formatDecimal(vehicle.dailyRate, 0, 'COMMA', 0, 'POINT') + ' ₫ / ngày'}"></div>
+                <div th:if="${vehicle.depositAmount}" class="text-muted" style="font-size:0.8rem">
+                    Đặt cọc: <span th:text="${#numbers.formatDecimal(vehicle.depositAmount, 0, 'COMMA', 0, 'POINT') + ' ₫'}"></span>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Booking Form -->
+    <div class="card">
+        <div class="card-body">
+            <h2 style="font-size:1.2rem;margin-bottom:1.5rem;font-weight:700">📋 Thông tin đặt xe</h2>
+            <form th:action="@{/bookings/create/{id}(id=${vehicle.vehicleId})}" method="post">
+                <div class="grid" style="grid-template-columns:1fr 1fr;gap:1rem">
+                    <div class="form-group">
+                        <label class="form-label">📅 Ngày nhận xe</label>
+                        <input type="date" name="startDate" class="form-control" required
+                               th:min="${#temporals.format(#temporals.createNow(), 'yyyy-MM-dd')}">
+                    </div>
+                    <div class="form-group">
+                        <label class="form-label">📅 Ngày trả xe</label>
+                        <input type="date" name="endDate" class="form-control" required>
+                    </div>
+                    <div class="form-group">
+                        <label class="form-label">📍 Địa điểm nhận</label>
+                        <select name="pickupLocationId" class="form-control" required>
+                            <option value="">-- Chọn địa điểm --</option>
+                            <option th:each="loc : ${locations}"
+                                    th:value="${loc.locationId}"
+                                    th:text="${loc.address + ', ' + loc.city}"></option>
+                        </select>
+                    </div>
+                    <div class="form-group">
+                        <label class="form-label">📍 Địa điểm trả</label>
+                        <select name="returnLocationId" class="form-control" required>
+                            <option value="">-- Chọn địa điểm --</option>
+                            <option th:each="loc : ${locations}"
+                                    th:value="${loc.locationId}"
+                                    th:text="${loc.address + ', ' + loc.city}"></option>
+                        </select>
+                    </div>
+                </div>
+                <div class="form-group">
+                    <label class="form-label">Ghi chú thêm</label>
+                    <textarea name="description" class="form-control" rows="3"
+                              placeholder="Có yêu cầu đặc biệt gì không?"></textarea>
+                </div>
+                <div class="d-flex justify-between align-center">
+                    <a th:href="@{/}" class="btn btn-outline">Hủy</a>
+                    <button type="submit" class="btn btn-primary">✅ Xác nhận đặt xe</button>
+                </div>
+            </form>
+        </div>
+    </div>
+</div>
+</body>
+</html>
