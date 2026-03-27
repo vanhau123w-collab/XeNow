@@ -37,11 +37,22 @@ public class CustomerService {
     }
     
     public Customer register(Customer customer) {
+        // Check if email already exists
+        if (userRepository.findByEmail(customer.getUser().getEmail()).isPresent()) {
+            throw new RuntimeException("Email đã được sử dụng");
+        }
+        if (userRepository.findByUsername(customer.getUser().getUsername()).isPresent()) {
+            throw new RuntimeException("Username đã được sử dụng");
+        }
+        
         // Save user first
         User user = customer.getUser();
         user = userRepository.save(user);
+        
+        // Set user to customer
         customer.setUser(user);
         customer.setUserId(user.getUserId());
+        
         return customerRepository.save(customer);
     }
 }
