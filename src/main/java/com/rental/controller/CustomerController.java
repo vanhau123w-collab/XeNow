@@ -1,5 +1,6 @@
 package com.rental.controller;
 
+import com.rental.dto.CustomerResponseDTO;
 import com.rental.entity.Customer;
 import com.rental.entity.User;
 import com.rental.repository.CustomerRepository;
@@ -30,6 +31,31 @@ public class CustomerController {
         boolean isVerified = customerRepository.findById(user.getUserId()).isPresent();
         
         return ResponseEntity.ok(new VerificationStatusDTO(isVerified, user.getUserId()));
+    }
+
+    @GetMapping("/{userId}")
+    public ResponseEntity<?> getCustomerById(@PathVariable Integer userId, Authentication authentication) {
+        if (authentication == null || !authentication.isAuthenticated()) {
+            return ResponseEntity.status(401).body("Chưa đăng nhập");
+        }
+
+        Customer customer = customerRepository.findById(userId)
+                .orElseThrow(() -> new RuntimeException("Không tìm thấy thông tin khách hàng"));
+        
+        // Convert to DTO to avoid lazy loading issues
+        CustomerResponseDTO dto = CustomerResponseDTO.builder()
+                .userId(customer.getUserId())
+                .identityCard(customer.getIdentityCard())
+                .identityCardIssueDate(customer.getIdentityCardIssueDate())
+                .identityCardExpiry(customer.getIdentityCardExpiry())
+                .address(customer.getAddress())
+                .driverLicense(customer.getDriverLicense())
+                .driverLicenseClass(customer.getDriverLicenseClass())
+                .driverLicenseIssueDate(customer.getDriverLicenseIssueDate())
+                .driverLicenseExpiry(customer.getDriverLicenseExpiry())
+                .build();
+        
+        return ResponseEntity.ok(dto);
     }
 
     @PostMapping("/verify")

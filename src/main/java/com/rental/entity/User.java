@@ -36,6 +36,9 @@ public class User {
     @Column(name = "Phone", length = 20)
     private String phone;
 
+    @Column(name = "DateOfBirth")
+    private java.time.LocalDate dateOfBirth;
+
     @Enumerated(EnumType.STRING)
     @Column(name = "Status")
     @Builder.Default

@@ -6,11 +6,15 @@ import com.rental.entity.Role;
 import com.rental.entity.User;
 import com.rental.repository.RoleRepository;
 import com.rental.repository.UserRepository;
+import com.rental.util.JwtUtil;
 import lombok.RequiredArgsConstructor;
 import org.springframework.http.ResponseEntity;
 import org.springframework.security.core.Authentication;
 import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.web.bind.annotation.*;
+
+import java.util.HashMap;
+import java.util.Map;
 
 @RestController
 @RequestMapping("/api/auth")
@@ -21,6 +25,7 @@ public class AuthController {
     private final UserRepository userRepository;
     private final RoleRepository roleRepository;
     private final PasswordEncoder passwordEncoder;
+    private final JwtUtil jwtUtil;
 
     @PostMapping("/register")
     public ResponseEntity<?> register(@RequestBody User user) {
@@ -72,8 +77,6 @@ public class AuthController {
             }
             
             System.out.println("User found: " + user.getUsername());
-            System.out.println("Stored password hash: " + user.getPassword());
-            System.out.println("Input password: " + loginRequest.getPassword());
             
             boolean passwordMatches = passwordEncoder.matches(loginRequest.getPassword(), user.getPassword());
             System.out.println("Password matches: " + passwordMatches);
@@ -97,13 +100,31 @@ public class AuthController {
                 ));
             }
             
-            System.out.println("Login successful for: " + user.getUsername());
-            return ResponseEntity.ok(new AuthResponseDTO(
-                "Đăng nhập thành công",
+            // Generate JWT token
+            String token = jwtUtil.generateToken(
                 user.getUsername(),
                 user.getRole().getRoleName(),
-                true
-            ));
+                user.getUserId()
+            );
+            
+            System.out.println("Login successful for: " + user.getUsername());
+            
+            // Create response map
+            Map<String, Object> userMap = new HashMap<>();
+            userMap.put("userId", user.getUserId());
+            userMap.put("username", user.getUsername());
+            userMap.put("fullName", user.getFullName());
+            userMap.put("email", user.getEmail());
+            userMap.put("phone", user.getPhone());
+            userMap.put("role", user.getRole().getRoleName());
+            
+            Map<String, Object> response = new HashMap<>();
+            response.put("message", "Đăng nhập thành công");
+            response.put("authenticated", true);
+            response.put("token", token);
+            response.put("user", userMap);
+            
+            return ResponseEntity.ok(response);
         } catch (Exception e) {
             e.printStackTrace();
             return ResponseEntity.ok(new AuthResponseDTO(
@@ -131,19 +152,21 @@ public class AuthController {
             return ResponseEntity.status(404).body("Không tìm thấy thông tin người dùng");
         }
         
-        // Return user info
-        return ResponseEntity.ok(new java.util.HashMap<String, Object>() {{
-            put("user", new java.util.HashMap<String, Object>() {{
-                put("userId", user.getUserId());
-                put("username", user.getUsername());
-                put("fullName", user.getFullName());
-                put("email", user.getEmail());
-                put("phone", user.getPhone());
-                put("dateOfBirth", user.getDateOfBirth());
-                put("role", user.getRole().getRoleName());
-                put("status", user.getStatus().toString());
-            }});
-            put("authenticated", true);
-        }});
+        // Create user map
+        Map<String, Object> userMap = new HashMap<>();
+        userMap.put("userId", user.getUserId());
+        userMap.put("username", user.getUsername());
+        userMap.put("fullName", user.getFullName());
+        userMap.put("email", user.getEmail());
+        userMap.put("phone", user.getPhone());
+        userMap.put("dateOfBirth", user.getDateOfBirth());
+        userMap.put("role", user.getRole().getRoleName());
+        userMap.put("status", user.getStatus().toString());
+        
+        Map<String, Object> response = new HashMap<>();
+        response.put("user", userMap);
+        response.put("authenticated", true);
+        
+        return ResponseEntity.ok(response);
     }
 }
