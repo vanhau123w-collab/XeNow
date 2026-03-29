@@ -47,10 +47,15 @@ public class JwtAuthenticationFilter extends OncePerRequestFilter {
                     );
                     authToken.setDetails(new WebAuthenticationDetailsSource().buildDetails(request));
                     SecurityContextHolder.getContext().setAuthentication(authToken);
+                    // System.out.println("JWT Filter: Authenticated user " + username + " with role " + role);
+                } else {
+                    System.err.println("JWT Filter: Token validation failed for user " + username);
                 }
             }
+        } catch (io.jsonwebtoken.ExpiredJwtException e) {
+            System.err.println("JWT Filter: Token expired - " + e.getMessage());
         } catch (Exception e) {
-            System.err.println("JWT validation error: " + e.getMessage());
+            System.err.println("JWT Filter Error: " + e.getClass().getSimpleName() + " - " + e.getMessage());
         }
 
         filterChain.doFilter(request, response);

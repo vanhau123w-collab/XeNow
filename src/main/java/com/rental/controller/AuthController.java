@@ -47,14 +47,36 @@ public class AuthController {
             user.setRole(customerRole);
             user.setStatus(User.Status.Active);
             
-            // Save user only
-            userRepository.save(user);
+            // Save user
+            User savedUser = userRepository.save(user);
+
+            // Generate JWT token for auto-login
+            String token = jwtUtil.generateToken(
+                savedUser.getUsername(),
+                savedUser.getRole().getRoleName(),
+                savedUser.getUserId()
+            );
+
+            // Create response data
+            Map<String, Object> userMap = new HashMap<>();
+            userMap.put("userId", savedUser.getUserId());
+            userMap.put("username", savedUser.getUsername());
+            userMap.put("fullName", savedUser.getFullName());
+            userMap.put("email", savedUser.getEmail());
+            userMap.put("role", savedUser.getRole().getRoleName());
+
+            Map<String, Object> response = new HashMap<>();
+            response.put("message", "Đăng ký thành công!");
+            response.put("authenticated", true);
+            response.put("token", token);
+            response.put("user", userMap);
             
-            return ResponseEntity.ok("Đăng ký thành công! Vui lòng đăng nhập và xác thực danh tính.");
+            return ResponseEntity.ok(response);
         } catch (Exception e) {
             return ResponseEntity.badRequest().body("Đăng ký thất bại: " + e.getMessage());
         }
     }
+
 
     @PostMapping("/login")
     public ResponseEntity<?> login(@RequestBody LoginRequest loginRequest) {

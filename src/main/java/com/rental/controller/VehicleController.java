@@ -18,8 +18,13 @@ public class VehicleController {
     private final VehicleService vehicleService;
 
     @GetMapping
-    public List<VehicleDTO> getAll(@RequestParam(required = false) Integer typeId) {
-        return vehicleService.getAvailableByType(typeId).stream()
+    public List<VehicleDTO> getAll(@RequestParam(required = false) String type) {
+        if (type != null) {
+            return vehicleService.getAvailableByType(type).stream()
+                .map(this::convertToDTO)
+                .collect(Collectors.toList());
+        }
+        return vehicleService.getAvailableVehicles().stream()
                 .map(this::convertToDTO)
                 .collect(Collectors.toList());
     }
@@ -40,14 +45,20 @@ public class VehicleController {
         
         // Basic info
         dto.setLicensePlate(vehicle.getLicensePlate());
+        // Dynamic name generation
         dto.setName(vehicle.getName());
-        dto.setModel(vehicle.getModel());
-        dto.setBrand(vehicle.getBrand());
+        dto.setModelName(vehicle.getModelName());
+        dto.setBrandName(vehicle.getBrandName());
+        dto.setModel(vehicle.getModelName()); // For compatibility
+        dto.setBrand(vehicle.getBrandName()); // For compatibility
+        
+        if (vehicle.getModel() != null) {
+            dto.setModelId(vehicle.getModel().getModelId());
+        }
         
         // Year
         dto.setYear(vehicle.getManufactureYear());
         dto.setManufactureYear(vehicle.getManufactureYear());
-        dto.setYearMade(vehicle.getManufactureYear());
         
         // Pricing and status
         dto.setPricePerDay(vehicle.getPricePerDay());
@@ -58,21 +69,7 @@ public class VehicleController {
         
         // Type
         if (vehicle.getType() != null) {
-            String typeName = vehicle.getType().getTypeName();
-            dto.setType(typeName);
-            dto.setTypeName(typeName);
-            
-            // Determine category based on type (case-insensitive and trim whitespace)
-            String typeNameLower = typeName.toLowerCase().trim();
-            if (typeNameLower.contains("tay ga") || typeNameLower.contains("số") || 
-                typeNameLower.equals("xe tay ga") || typeNameLower.equals("xe số")) {
-                dto.setCategory("motorcycle");
-            } else {
-                dto.setCategory("car");
-            }
-        } else {
-            // Default to car if no type
-            dto.setCategory("car");
+            dto.setType(vehicle.getType());
         }
         
         // Vehicle specs from database

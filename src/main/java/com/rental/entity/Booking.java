@@ -14,7 +14,7 @@ import java.time.LocalDateTime;
 public class Booking {
 
     public enum Status {
-        Pending, Confirmed, PickedUp, Ongoing, Returned, Cancelled
+        Pending, Confirmed, Ongoing, Completed, Cancelled
     }
 
     @Id
@@ -62,6 +62,12 @@ public class Booking {
     @ManyToOne(fetch = FetchType.LAZY)
     @JoinColumn(name = "CouponID")
     private Coupon coupon;
+
+    @Column(name = "ReturnMileage")
+    private Integer returnMileage;
+
+    @Column(name = "ReturnNote", length = 500)
+    private String returnNote;
 
     @Column(name = "DeletedAt")
     private LocalDateTime deletedAt;

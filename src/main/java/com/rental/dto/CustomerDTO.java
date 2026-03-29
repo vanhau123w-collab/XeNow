@@ -12,4 +12,5 @@ public class CustomerDTO {
     private String phone;
     private String identityCard;
     private String driverLicense;
+    private String driverLicenseExpiry;
 }
