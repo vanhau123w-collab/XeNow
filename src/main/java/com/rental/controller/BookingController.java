@@ -58,7 +58,7 @@ public class BookingController {
         BookingDTO dto = new BookingDTO();
         dto.setBookingId(booking.getBookingId());
         dto.setVehicleId(booking.getVehicle().getVehicleId());
-        dto.setVehicleModel(booking.getVehicle().getModel());
+        dto.setVehicleModel(booking.getVehicle().getName());
         dto.setCustomerName(booking.getCustomer().getName());
         dto.setStartDate(booking.getStartDate());
         dto.setEndDate(booking.getEndDate());

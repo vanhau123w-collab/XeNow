@@ -22,29 +22,48 @@ public class Vehicle {
     @Column(name = "VehicleID")
     private Integer vehicleId;
 
-    @ManyToOne(fetch = FetchType.LAZY)
-    @JoinColumn(name = "TypeID")
-    private VehicleType type;
+    @Column(name = "Type", length = 50)
+    private String type;
 
-    @ManyToOne(fetch = FetchType.LAZY)
+    @ManyToOne(fetch = FetchType.EAGER)
     @JoinColumn(name = "CurrentLocationID")
     private Location currentLocation;
 
     @Column(name = "LicensePlate", nullable = false, unique = true, length = 20)
     private String licensePlate;
 
-    @Column(name = "Name", nullable = false, length = 100)
-    private String name;
-
-    @Column(name = "Brand", length = 50)
-    private String brand;
+    @ManyToOne(fetch = FetchType.EAGER, optional = true)
+    @JoinColumn(name = "ModelID")
+    private Model model;
 
     @Column(name = "ManufactureYear")
     private Integer manufactureYear;
     
     // Getter methods for compatibility
-    public String getModel() {
-        return name;
+    public String getModelName() {
+        return model != null ? model.getModelName() : "N/A";
+    }
+
+    public String getBrandName() {
+        return (model != null && model.getBrand() != null) ? model.getBrand().getBrandName() : "N/A";
+    }
+    
+    // Virtual name generated as requested: Brand + Model + Year
+    public String getFullName() {
+        String mName = getModelName();
+        String bName = getBrandName();
+        if (mName != null && bName != null) {
+            String mLower = mName.toLowerCase();
+            String bLower = bName.toLowerCase();
+            if (mLower.contains(bLower)) {
+                return mName + " " + (manufactureYear != null ? manufactureYear : "");
+            }
+        }
+        return bName + " " + mName + " " + (manufactureYear != null ? manufactureYear : "");
+    }
+
+    public String getName() {
+        return getFullName();
     }
     
     public Integer getYearMade() {
@@ -63,6 +82,19 @@ public class Vehicle {
     @Builder.Default
     private Integer mileage = 0;
 
+    @Column(name = "LastMaintenanceMileage")
+    @Builder.Default
+    private Integer lastMaintenanceMileage = 0;
+
+    @Column(name = "Seats")
+    private Integer seats;
+
+    @Column(name = "FuelType", length = 50)
+    private String fuelType;
+
+    @Column(name = "Transmission", length = 50)
+    private String transmission;
+
     @Column(name = "PricePerDay", nullable = false, precision = 15, scale = 2)
     private BigDecimal pricePerDay;
 
@@ -78,6 +110,10 @@ public class Vehicle {
     @Column(name = "TotalReviews")
     @Builder.Default
     private Integer totalReviews = 0;
+
+    @OneToMany(mappedBy = "vehicle", cascade = CascadeType.ALL, orphanRemoval = true)
+    @Builder.Default
+    private java.util.List<VehicleImage> images = new java.util.ArrayList<>();
 
     @Column(name = "DeletedAt")
     private LocalDateTime deletedAt;
