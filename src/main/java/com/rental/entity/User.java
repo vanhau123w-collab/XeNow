@@ -1,8 +1,12 @@
 package com.rental.entity;
 
+import com.fasterxml.jackson.annotation.JsonIgnore;
 import jakarta.persistence.*;
 import lombok.*;
+import org.hibernate.annotations.CreationTimestamp;
+import org.hibernate.annotations.UpdateTimestamp;
 import java.time.LocalDateTime;
+import java.util.List;
 
 @Entity
 @Table(name = "User")
@@ -36,6 +40,15 @@ public class User {
     @Column(name = "Phone", length = 20)
     private String phone;
 
+    @Column(name = "Address", length = 255)
+    private String address;
+
+    @Column(name = "Gender", length = 20)
+    private String gender;
+
+    @Column(name = "Avatar", length = 255)
+    private String avatar;
+
     @Column(name = "DateOfBirth")
     private java.time.LocalDate dateOfBirth;
 
@@ -44,18 +57,19 @@ public class User {
     @Builder.Default
     private Status status = Status.Active;
 
+    @CreationTimestamp
     @Column(name = "CreatedAt", updatable = false)
     private LocalDateTime createdAt;
 
-    @Column(name = "DeletedAt")
-    private LocalDateTime deletedAt;
+    @UpdateTimestamp
+    @Column(name = "UpdatedAt")
+    private LocalDateTime updatedAt;
 
-    @ManyToOne(fetch = FetchType.LAZY)
-    @JoinColumn(name = "RoleID")
-    private Role role;
+    @ManyToMany(fetch = FetchType.LAZY)
+    @JoinTable(name = "user_role", joinColumns = @JoinColumn(name = "user_id"), inverseJoinColumns = @JoinColumn(name = "role_id"))
+    private List<Role> roles;
 
-    @PrePersist
-    protected void onCreate() {
-        createdAt = LocalDateTime.now();
-    }
+    @OneToMany(mappedBy = "user", cascade = CascadeType.ALL, orphanRemoval = true)
+    @JsonIgnore
+    private List<RefreshToken> refreshTokens;
 }

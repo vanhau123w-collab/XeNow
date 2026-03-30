@@ -68,9 +68,9 @@ public class AdminController {
 
     @PostMapping("/bookings/{id}/status")
     public ResponseEntity<?> updateBookingStatus(@PathVariable Integer id,
-                                               @RequestParam String status,
-                                               @RequestParam(required = false) Integer mileage,
-                                               @RequestParam(required = false) String note) {
+            @RequestParam String status,
+            @RequestParam(required = false) Integer mileage,
+            @RequestParam(required = false) String note) {
         try {
             bookingService.updateStatus(id, Booking.Status.valueOf(status), mileage, note);
             return ResponseEntity.ok(Collections.singletonMap("message", "Cập nhật trạng thái thành công!"));
@@ -88,7 +88,7 @@ public class AdminController {
 
     @PostMapping("/vehicles/{id}/status")
     public ResponseEntity<?> updateVehicleStatus(@PathVariable Integer id,
-                                               @RequestParam String status) {
+            @RequestParam String status) {
         try {
             vehicleService.updateStatus(id, Vehicle.Status.valueOf(status));
             return ResponseEntity.ok(Collections.singletonMap("message", "Cập nhật trạng thái xe thành công!"));
@@ -153,10 +153,11 @@ public class AdminController {
             return ResponseEntity.ok(Collections.singletonMap("message", "Xóa chi nhánh thành công!"));
         } catch (DataIntegrityViolationException e) {
             return ResponseEntity.status(HttpStatus.CONFLICT)
-                .body(Collections.singletonMap("message", "Không thể xóa chi nhánh này vì đang có các xe thuộc về chi nhánh này."));
+                    .body(Collections.singletonMap("message",
+                            "Không thể xóa chi nhánh này vì đang có các xe thuộc về chi nhánh này."));
         } catch (Exception e) {
             return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR)
-                .body(Collections.singletonMap("message", "Lỗi khi xóa chi nhánh: " + e.getMessage()));
+                    .body(Collections.singletonMap("message", "Lỗi khi xóa chi nhánh: " + e.getMessage()));
         }
     }
 
@@ -186,10 +187,11 @@ public class AdminController {
             return ResponseEntity.ok(Collections.singletonMap("message", "Xóa hãng xe thành công!"));
         } catch (DataIntegrityViolationException e) {
             return ResponseEntity.status(HttpStatus.CONFLICT)
-                .body(Collections.singletonMap("message", "Không thể xóa hãng xe này vì đang có các mẫu xe hoặc xe liên quan."));
+                    .body(Collections.singletonMap("message",
+                            "Không thể xóa hãng xe này vì đang có các mẫu xe hoặc xe liên quan."));
         } catch (Exception e) {
             return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR)
-                .body(Collections.singletonMap("message", "Lỗi khi xóa hãng xe: " + e.getMessage()));
+                    .body(Collections.singletonMap("message", "Lỗi khi xóa hãng xe: " + e.getMessage()));
         }
     }
 
@@ -232,12 +234,14 @@ public class AdminController {
             return ResponseEntity.ok(Collections.singletonMap("message", "Xóa mẫu xe thành công!"));
         } catch (DataIntegrityViolationException e) {
             return ResponseEntity.status(HttpStatus.CONFLICT)
-                .body(Collections.singletonMap("message", "Không thể xóa mẫu xe này vì đang có các xe liên quan đang sử dụng mẫu này."));
+                    .body(Collections.singletonMap("message",
+                            "Không thể xóa mẫu xe này vì đang có các xe liên quan đang sử dụng mẫu này."));
         } catch (Exception e) {
             return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR)
-                .body(Collections.singletonMap("message", "Lỗi khi xóa mẫu xe: " + e.getMessage()));
+                    .body(Collections.singletonMap("message", "Lỗi khi xóa mẫu xe: " + e.getMessage()));
         }
     }
+
     @PostMapping("/vehicles")
     public ResponseEntity<VehicleDTO> createVehicle(@RequestBody VehicleDTO dto) {
         Vehicle vehicle = mapToEntity(dto);
@@ -265,10 +269,11 @@ public class AdminController {
             return ResponseEntity.ok(Collections.singletonMap("message", "Xóa xe thành công!"));
         } catch (DataIntegrityViolationException e) {
             return ResponseEntity.status(HttpStatus.CONFLICT)
-                .body(Collections.singletonMap("message", "Không thể xóa xe này vì đang có các lịch đặt xe (Booking) hoặc lịch sử liên quan."));
+                    .body(Collections.singletonMap("message",
+                            "Không thể xóa xe này vì đang có các lịch đặt xe (Booking) hoặc lịch sử liên quan."));
         } catch (Exception e) {
             return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR)
-                .body(Collections.singletonMap("message", "Lỗi khi xóa xe: " + e.getMessage()));
+                    .body(Collections.singletonMap("message", "Lỗi khi xóa xe: " + e.getMessage()));
         }
     }
 
@@ -277,7 +282,7 @@ public class AdminController {
         Vehicle vehicle = vehicleService.getById(id);
         try {
             for (MultipartFile file : files) {
-                String url = fileService.saveFile(file, "vehicles");
+                String url = fileService.saveFile(file, "vehicles").getFileUrl();
                 VehicleImage img = VehicleImage.builder()
                         .vehicle(vehicle)
                         .imageUrl(url)
@@ -304,7 +309,7 @@ public class AdminController {
     public ResponseEntity<?> setPrimaryImage(@PathVariable Integer imageId) {
         VehicleImage img = vehicleImageRepository.findById(imageId)
                 .orElseThrow(() -> new RuntimeException("Không tìm thấy ảnh"));
-        
+
         // Unset other primary images for this vehicle
         List<VehicleImage> images = vehicleImageRepository.findByVehicle(img.getVehicle());
         for (VehicleImage i : images) {
@@ -317,27 +322,28 @@ public class AdminController {
     private Vehicle mapToEntity(VehicleDTO dto) {
         Vehicle v = (dto.getVehicleId() != null) ? vehicleService.getById(dto.getVehicleId()) : new Vehicle();
         v.setLicensePlate(dto.getLicensePlate());
-        
+
         if (dto.getModelId() != null && dto.getModelId() > 0) {
             v.setModel(vehicleService.getModelById(dto.getModelId()));
         } else if (v.getModel() == null) {
             throw new RuntimeException("Vui lòng chọn mẫu xe hợp lệ");
         }
-        
-        v.setManufactureYear(dto.getYear() != null ? dto.getYear() : (dto.getManufactureYear() != null ? dto.getManufactureYear() : 2023));
+
+        v.setManufactureYear(dto.getYear() != null ? dto.getYear()
+                : (dto.getManufactureYear() != null ? dto.getManufactureYear() : 2023));
         v.setMileage(dto.getMileage() != null ? dto.getMileage() : 0);
         v.setLastMaintenanceMileage(dto.getLastMaintenanceMileage() != null ? dto.getLastMaintenanceMileage() : 0);
-        
+
         java.math.BigDecimal price = dto.getDailyRate() != null ? dto.getDailyRate() : dto.getPricePerDay();
         if (price == null || price.compareTo(java.math.BigDecimal.ZERO) <= 0) {
             throw new RuntimeException("Giá thuê mỗi ngày phải lớn hơn 0");
         }
         v.setPricePerDay(price);
-        
+
         v.setSeats(dto.getSeats() != null ? dto.getSeats() : 4);
         v.setFuelType(dto.getFuel() != null ? dto.getFuel() : (dto.getFuelType() != null ? dto.getFuelType() : "Xăng"));
         v.setTransmission(dto.getTransmission() != null ? dto.getTransmission() : "Tự động");
-        
+
         if (dto.getVehicleId() == null) {
             v.setStatus(Vehicle.Status.Available);
         }
@@ -347,11 +353,11 @@ public class AdminController {
         } else if (v.getType() == null) {
             v.setType("Xe Ô Tô");
         }
-        
+
         if (dto.getLocationId() != null && dto.getLocationId() > 0) {
             v.setCurrentLocation(vehicleService.getLocationById(dto.getLocationId()));
         }
-        
+
         return v;
     }
 
@@ -369,14 +375,14 @@ public class AdminController {
         dto.setStatus(booking.getStatus());
         dto.setReturnMileage(booking.getReturnMileage());
         dto.setReturnNote(booking.getReturnNote());
-        
+
         if (booking.getPickupLocation() != null) {
             dto.setPickupLocationName(booking.getPickupLocation().getBranchName());
         }
         if (booking.getReturnLocation() != null) {
             dto.setReturnLocationName(booking.getReturnLocation().getBranchName());
         }
-        
+
         return dto;
     }
 
@@ -385,18 +391,18 @@ public class AdminController {
         dto.setId(vehicle.getVehicleId());
         dto.setVehicleId(vehicle.getVehicleId());
         dto.setLicensePlate(vehicle.getLicensePlate());
-        
+
         // Dynamic name generation
         dto.setName(vehicle.getName());
         dto.setModelName(vehicle.getModelName());
         dto.setBrandName(vehicle.getBrandName());
         dto.setModel(vehicle.getModelName()); // For compatibility
         dto.setBrand(vehicle.getBrandName()); // For compatibility
-        
+
         if (vehicle.getModel() != null) {
             dto.setModelId(vehicle.getModel().getModelId());
         }
-        
+
         dto.setManufactureYear(vehicle.getManufactureYear());
         dto.setYear(vehicle.getManufactureYear());
         dto.setMileage(vehicle.getMileage());
@@ -405,43 +411,43 @@ public class AdminController {
         dto.setDailyRate(vehicle.getPricePerDay());
         dto.setStatus(vehicle.getStatus());
         dto.setAverageRating(vehicle.getAverageRating());
-        
+
         if (vehicle.getType() != null) {
             dto.setType(vehicle.getType());
         }
-        
+
         if (vehicle.getCurrentLocation() != null) {
             dto.setLocationId(vehicle.getCurrentLocation().getLocationId());
             dto.setLocation(vehicle.getCurrentLocation().getBranchName());
             dto.setLocationName(vehicle.getCurrentLocation().getBranchName());
         }
-        
+
         dto.setSeats(vehicle.getSeats());
         dto.setFuelType(vehicle.getFuelType());
         dto.setFuel(vehicle.getFuelType());
         dto.setTransmission(vehicle.getTransmission());
-        
+
         if (vehicle.getImages() != null && !vehicle.getImages().isEmpty()) {
             List<VehicleImageDTO> imgDTOs = vehicle.getImages().stream()
-                .map(img -> VehicleImageDTO.builder()
-                    .imageId(img.getImageId())
-                    .imageUrl(img.getImageUrl())
-                    .isPrimary(img.getIsPrimary())
-                    .build())
-                .collect(Collectors.toList());
+                    .map(img -> VehicleImageDTO.builder()
+                            .imageId(img.getImageId())
+                            .imageUrl(img.getImageUrl())
+                            .isPrimary(img.getIsPrimary())
+                            .build())
+                    .collect(Collectors.toList());
             dto.setImages(imgDTOs);
-            
+
             // Set primary image URL for main display
             String primaryUrl = imgDTOs.stream()
-                .filter(VehicleImageDTO::getIsPrimary)
-                .map(VehicleImageDTO::getImageUrl)
-                .findFirst()
-                .orElse(imgDTOs.get(0).getImageUrl());
+                    .filter(VehicleImageDTO::getIsPrimary)
+                    .map(VehicleImageDTO::getImageUrl)
+                    .findFirst()
+                    .orElse(imgDTOs.get(0).getImageUrl());
             dto.setImage(primaryUrl);
         } else {
             dto.setImage("/images/car-toyota-camry.webp");
         }
-        
+
         return dto;
     }
 
@@ -468,10 +474,10 @@ public class AdminController {
         dto.setAddress(location.getAddress());
         dto.setCity(location.getCity());
         dto.setPhone(location.getPhone());
-        
+
         // Count vehicles in this location
         dto.setVehicleCount(vehicleRepository.countByCurrentLocationLocationId(location.getLocationId()));
-        
+
         return dto;
     }
 }

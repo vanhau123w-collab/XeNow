@@ -2,27 +2,41 @@ package com.rental.entity;
 
 import jakarta.persistence.*;
 import lombok.*;
-import java.time.LocalDateTime;
+import org.hibernate.annotations.CreationTimestamp;
+import java.time.Instant;
 
 @Entity
-@Table(name = "RefreshToken")
+@Table(name = "refresh_tokens")
 @Data
 @NoArgsConstructor
 @AllArgsConstructor
 @Builder
 public class RefreshToken {
+
     @Id
     @GeneratedValue(strategy = GenerationType.IDENTITY)
-    @Column(name = "TokenID")
-    private Integer tokenId;
+    private long id;
+
+    @Column(nullable = false, unique = true, length = 512)
+    private String token;           // SHA-256 hash of JWT
 
     @ManyToOne(fetch = FetchType.LAZY)
-    @JoinColumn(name = "UserID")
+    @JoinColumn(name = "user_id", nullable = false)
     private User user;
 
-    @Column(name = "Token", nullable = false, length = 255)
-    private String token;
+    @Column(nullable = false)
+    private Instant expiresAt;
 
-    @Column(name = "ExpiryDate", nullable = false)
-    private LocalDateTime expiryDate;
+    @Column(nullable = false)
+    @Builder.Default
+    private boolean revoked = false;
+
+    @Column(length = 255)
+    private String deviceInfo;      // Parsed from User-Agent
+
+    @Column(length = 45)
+    private String ipAddress;       // IPv4 or IPv6
+
+    @CreationTimestamp
+    private Instant createdAt;
 }

@@ -2,9 +2,13 @@ package com.rental.entity;
 
 import jakarta.persistence.*;
 import lombok.*;
+import org.hibernate.annotations.CreationTimestamp;
+import org.hibernate.annotations.UpdateTimestamp;
+import java.time.Instant;
+import java.util.List;
 
 @Entity
-@Table(name = "Permission")
+@Table(name = "permissions")
 @Data
 @NoArgsConstructor
 @AllArgsConstructor
@@ -12,9 +16,26 @@ import lombok.*;
 public class Permission {
     @Id
     @GeneratedValue(strategy = GenerationType.IDENTITY)
-    @Column(name = "PermissionID")
-    private Integer permissionId;
+    private Integer id;
 
-    @Column(name = "PermissionName", nullable = false, unique = true, length = 100)
-    private String permissionName;
+    @Column(nullable = false)
+    private String name;
+
+    @Column(name = "api_path")
+    private String apiPath;
+
+    private String method;
+    
+    private String module;
+
+    @CreationTimestamp
+    @Column(name = "created_at", updatable = false)
+    private Instant createdAt;
+
+    @UpdateTimestamp
+    @Column(name = "updated_at")
+    private Instant updatedAt;
+
+    @ManyToMany(mappedBy = "permissions", fetch = FetchType.LAZY)
+    private List<Role> roles;
 }
