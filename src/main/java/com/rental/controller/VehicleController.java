@@ -27,21 +27,41 @@ public class VehicleController {
     @GetMapping
     public ResponseEntity<ApiResponse<Page<VehicleDTO>>> getAll(
             @RequestParam(required = false) String type,
+            @RequestParam(required = false) String brand,
+            @RequestParam(required = false) String seats,
+            @RequestParam(required = false) String location,
+            @RequestParam(required = false) String transmission,
             @RequestParam(defaultValue = "0") int page,
             @RequestParam(defaultValue = "6") int size) {
         
         Pageable pageable = PageRequest.of(page, size, Sort.by("vehicleId").descending());
-        Page<Vehicle> vehicles;
         
-        if (type != null && !type.isEmpty()) {
-            vehicles = vehicleService.getAvailableByType(type, pageable);
-        } else {
-            vehicles = vehicleService.getAvailableVehicles(pageable);
-        }
+        List<Vehicle> allVehicles = vehicleService.getAvailableVehicles();
         
-        Page<VehicleDTO> dtos = vehicles.map(this::convertToDTO);
+        // Apply filters
+        List<Vehicle> filtered = allVehicles.stream()
+            .filter(v -> type == null || type.isEmpty() || type.equals(v.getType()))
+            .filter(v -> brand == null || brand.isEmpty() || 
+                java.util.Arrays.asList(brand.split(",")).contains(v.getBrandName()))
+            .filter(v -> seats == null || seats.isEmpty() || 
+                java.util.Arrays.asList(seats.split(",")).stream()
+                    .anyMatch(s -> s.equals(String.valueOf(v.getSeats()))))
+            .filter(v -> location == null || location.isEmpty() || 
+                (v.getCurrentLocation() != null && 
+                java.util.Arrays.asList(location.split(",")).contains(v.getCurrentLocation().getBranchName())))
+            .filter(v -> transmission == null || transmission.isEmpty() || 
+                java.util.Arrays.asList(transmission.split(",")).contains(v.getTransmission()))
+            .collect(java.util.stream.Collectors.toList());
         
-        return ResponseEntity.ok(ApiResponse.success(dtos, "Lấy danh sách xe trống thành công"));
+        // Manual pagination
+        int start = (int) pageable.getOffset();
+        int end = Math.min(start + pageable.getPageSize(), filtered.size());
+        List<VehicleDTO> dtos = filtered.subList(start > filtered.size() ? filtered.size() : start, end)
+            .stream().map(this::convertToDTO).collect(java.util.stream.Collectors.toList());
+        
+        Page<VehicleDTO> result = new org.springframework.data.domain.PageImpl<>(dtos, pageable, filtered.size());
+        
+        return ResponseEntity.ok(ApiResponse.success(result, "Lấy danh sách xe thành công"));
     }
 
 

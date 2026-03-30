@@ -93,6 +93,12 @@ public class AdminController {
         return ResponseEntity.ok(ApiResponse.success(vehicles, "Lấy danh sách xe thành công"));
     }
 
+    @GetMapping("/vehicles/{id}")
+    public ResponseEntity<ApiResponse<VehicleDTO>> getVehicleById(@PathVariable Integer id) {
+        Vehicle vehicle = vehicleService.getById(id);
+        return ResponseEntity.ok(ApiResponse.success(convertToVehicleDTO(vehicle), "Lấy thông tin xe thành công"));
+    }
+
     @PostMapping("/vehicles/{id}/status")
     public ResponseEntity<ApiResponse<Object>> updateVehicleStatus(@PathVariable Integer id,
             @RequestParam String status) {
