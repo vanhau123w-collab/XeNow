@@ -54,7 +54,7 @@ public class SecurityConfig {
                         .requestMatchers("/", "/index.html", "/static/**", "/css/**", "/js/**", "/images/**", "/uploads/**")
                         .permitAll()
                         .requestMatchers("/api/auth/**").permitAll()
-                        .requestMatchers(org.springframework.http.HttpMethod.GET, "/api/vehicles/**", "/api/brands/**", "/api/models/**", "/api/branches/**").permitAll()
+                        .requestMatchers(org.springframework.http.HttpMethod.GET, "/api/vehicles/**", "/api/brands/**", "/api/models/**", "/api/branches/**", "/api/locations/**").permitAll()
                         .anyRequest().authenticated())
                 .oauth2ResourceServer(oauth2 -> oauth2
                         .jwt(jwt -> jwt.jwtAuthenticationConverter(jwtAuthenticationConverter())));
