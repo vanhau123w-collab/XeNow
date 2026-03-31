@@ -19,7 +19,9 @@ public class BookingDTO {
     private String pickupLocationName;
     private String returnLocationName;
     private BigDecimal totalPrice;
+    private BigDecimal depositAmount;
     private Booking.Status status;
     private Integer returnMileage;
     private String returnNote;
+    private LocalDateTime createdAt;
 }
