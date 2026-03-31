@@ -98,6 +98,9 @@ public class Vehicle {
     @Column(name = "PricePerDay", nullable = false, precision = 15, scale = 2)
     private BigDecimal pricePerDay;
 
+    @Column(name = "DepositAmount", precision = 15, scale = 2)
+    private BigDecimal depositAmount;
+
     @Enumerated(EnumType.STRING)
     @Column(name = "Status")
     @Builder.Default

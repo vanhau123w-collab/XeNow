@@ -29,9 +29,10 @@ public class CustomerService {
                 .orElseThrow(() -> new RuntimeException("Không tìm thấy khách hàng với ID: " + userId));
     }
     
-    public Customer findByEmail(String email) {
-        User user = userRepository.findByEmail(email)
-                .orElseThrow(() -> new RuntimeException("Không tìm thấy người dùng với email: " + email));
+    public Customer findByEmail(String identifier) {
+        User user = userRepository.findByUsername(identifier)
+                .or(() -> userRepository.findByEmail(identifier))
+                .orElseThrow(() -> new RuntimeException("Không tìm thấy người dùng với định danh: " + identifier));
         return customerRepository.findById(user.getUserId())
                 .orElseThrow(() -> new RuntimeException("Không tìm thấy khách hàng"));
     }

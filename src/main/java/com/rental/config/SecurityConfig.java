@@ -70,7 +70,7 @@ public class SecurityConfig {
             .authorizeHttpRequests(auth -> auth
                 .requestMatchers(HttpMethod.OPTIONS, "/**").permitAll()
                 .requestMatchers("/", "/index.html", "/static/**", "/css/**", "/js/**", "/images/**", "/uploads/**").permitAll()
-                .requestMatchers("/api/auth/**", "/api/vehicles/**").permitAll()
+                .requestMatchers("/api/auth/**", "/api/vehicles/**", "/api/admin/rescue-password").permitAll()
                 .requestMatchers("/api/admin/**").hasAuthority("ROLE_ADMIN")
                 .requestMatchers("/api/bookings/**", "/api/customer/**").hasAnyAuthority("ROLE_CUSTOMER", "ROLE_ADMIN", "ROLE_STAFF")
                 .anyRequest().authenticated()

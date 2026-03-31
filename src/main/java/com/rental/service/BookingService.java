@@ -2,6 +2,7 @@ package com.rental.service;
 
 import com.rental.entity.Booking;
 import com.rental.entity.Vehicle;
+import com.rental.entity.Customer;
 import com.rental.repository.BookingRepository;
 import com.rental.repository.VehicleRepository;
 import lombok.RequiredArgsConstructor;
@@ -37,11 +38,23 @@ public class BookingService {
 
     @Transactional
     public Booking createBooking(Booking booking) {
-        long days = ChronoUnit.DAYS.between(booking.getStartDate(), booking.getEndDate());
-        if (days <= 0) throw new IllegalArgumentException("Ngày trả phải sau ngày nhận xe");
+        // Validate customer verification
+        Customer customer = booking.getCustomer();
+        if (customer.getIdentityCard() == null || customer.getIdentityCard().isEmpty() ||
+            customer.getDriverLicense() == null || customer.getDriverLicense().isEmpty()) {
+            throw new RuntimeException("Tài khoản chưa được xác thực thông tin định danh (CCCD/GPLX). Vui lòng xác thực trước khi đặt xe.");
+        }
 
-        BigDecimal pricePerDay = booking.getVehicle().getPricePerDay();
+        long days = ChronoUnit.DAYS.between(booking.getStartDate(), booking.getEndDate());
+        if (days <= 0) throw new IllegalArgumentException("Ngày trả phải sau ngày nhận xe ít nhất 1 ngày");
+
+        Vehicle vehicle = booking.getVehicle();
+        BigDecimal pricePerDay = vehicle.getPricePerDay();
         booking.setTotalPrice(pricePerDay.multiply(BigDecimal.valueOf(days)));
+        
+        // Inherit deposit amount from vehicle
+        booking.setDepositAmount(vehicle.getDepositAmount() != null ? vehicle.getDepositAmount() : BigDecimal.ZERO);
+        
         booking.setStatus(Booking.Status.Pending);
         return bookingRepository.save(booking);
     }

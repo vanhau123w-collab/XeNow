@@ -71,4 +71,12 @@ public class Booking {
 
     @Column(name = "DeletedAt")
     private LocalDateTime deletedAt;
+
+    @Column(name = "CreatedAt", updatable = false)
+    private LocalDateTime createdAt;
+
+    @PrePersist
+    protected void onCreate() {
+        createdAt = LocalDateTime.now();
+    }
 }

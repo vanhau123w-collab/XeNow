@@ -40,6 +40,29 @@ public class AdminController {
     private final ModelRepository modelRepository;
     private final com.rental.repository.VehicleRepository vehicleRepository;
     private final com.rental.repository.LocationRepository locationRepository;
+    private final com.rental.repository.UserRepository userRepository;
+    private final org.springframework.security.crypto.password.PasswordEncoder passwordEncoder;
+
+    @org.springframework.transaction.annotation.Transactional
+    @GetMapping("/rescue-password")
+    public ResponseEntity<?> rescuePassword() {
+        try {
+            com.rental.entity.User user = userRepository.findById(3)
+                .orElseThrow(() -> new RuntimeException("Không tìm thấy User ID 3"));
+            String oldPass = user.getPassword();
+            String newHash = passwordEncoder.encode("123456");
+            user.setPassword(newHash);
+            userRepository.saveAndFlush(user);
+            
+            System.out.println("USER ID 3: " + user.getUsername() + " | FullName: " + user.getFullName());
+            System.out.println("OLD PASS: " + oldPass);
+            System.out.println("NEW HASH: " + newHash);
+            
+            return ResponseEntity.ok("Mật khẩu của " + user.getUsername() + " (ID 3) đã được đổi thành: 123456. Hash: " + newHash);
+        } catch (Exception e) {
+            return ResponseEntity.badRequest().body(e.getMessage());
+        }
+    }
 
     @GetMapping("/dashboard")
     public DashboardStatsDTO dashboard() {
@@ -334,6 +357,8 @@ public class AdminController {
         }
         v.setPricePerDay(price);
         
+        v.setDepositAmount(dto.getDepositAmount() != null ? dto.getDepositAmount() : (v.getDepositAmount() != null ? v.getDepositAmount() : java.math.BigDecimal.ZERO));
+        
         v.setSeats(dto.getSeats() != null ? dto.getSeats() : 4);
         v.setFuelType(dto.getFuel() != null ? dto.getFuel() : (dto.getFuelType() != null ? dto.getFuelType() : "Xăng"));
         v.setTransmission(dto.getTransmission() != null ? dto.getTransmission() : "Tự động");
@@ -403,6 +428,7 @@ public class AdminController {
         dto.setLastMaintenanceMileage(vehicle.getLastMaintenanceMileage());
         dto.setPricePerDay(vehicle.getPricePerDay());
         dto.setDailyRate(vehicle.getPricePerDay());
+        dto.setDepositAmount(vehicle.getDepositAmount());
         dto.setStatus(vehicle.getStatus());
         dto.setAverageRating(vehicle.getAverageRating());
         

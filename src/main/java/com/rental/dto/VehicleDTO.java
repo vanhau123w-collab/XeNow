@@ -22,6 +22,7 @@ public class VehicleDTO {
     private Integer lastMaintenanceMileage;
     private BigDecimal pricePerDay;
     private BigDecimal dailyRate; // For frontend compatibility
+    private BigDecimal depositAmount;
     private Vehicle.Status status;
     private String type;
     private Integer locationId;

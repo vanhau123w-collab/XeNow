@@ -63,6 +63,7 @@ public class VehicleController {
         // Pricing and status
         dto.setPricePerDay(vehicle.getPricePerDay());
         dto.setDailyRate(vehicle.getPricePerDay());
+        dto.setDepositAmount(vehicle.getDepositAmount());
         dto.setStatus(vehicle.getStatus());
         dto.setMileage(vehicle.getMileage());
         dto.setAverageRating(vehicle.getAverageRating());
@@ -72,20 +73,39 @@ public class VehicleController {
             dto.setType(vehicle.getType());
         }
         
-        // Vehicle specs from database
-        dto.setSeats(vehicle.getSeats());
+        // Fuel and transmission
+        dto.setFuelType(vehicle.getFuelType());
         dto.setFuel(vehicle.getFuelType());
         dto.setTransmission(vehicle.getTransmission());
         
         // Location
         if (vehicle.getCurrentLocation() != null) {
             String locationName = vehicle.getCurrentLocation().getBranchName();
+            dto.setLocationId(vehicle.getCurrentLocation().getLocationId());
             dto.setLocation(locationName);
             dto.setLocationName(locationName);
         }
         
-        // Image - placeholder for now
-        dto.setImage("/images/car-toyota-camry.webp");
+        // Images logic from AdminController
+        if (vehicle.getImages() != null && !vehicle.getImages().isEmpty()) {
+            List<com.rental.dto.VehicleImageDTO> imgDTOs = vehicle.getImages().stream()
+                .map(img -> com.rental.dto.VehicleImageDTO.builder()
+                    .imageId(img.getImageId())
+                    .imageUrl(img.getImageUrl())
+                    .isPrimary(img.getIsPrimary())
+                    .build())
+                .collect(Collectors.toList());
+            dto.setImages(imgDTOs);
+            
+            String primaryUrl = imgDTOs.stream()
+                .filter(com.rental.dto.VehicleImageDTO::getIsPrimary)
+                .map(com.rental.dto.VehicleImageDTO::getImageUrl)
+                .findFirst()
+                .orElse(imgDTOs.get(0).getImageUrl());
+            dto.setImage(primaryUrl);
+        } else {
+            dto.setImage("/images/car-toyota-camry.webp");
+        }
         
         return dto;
     }
