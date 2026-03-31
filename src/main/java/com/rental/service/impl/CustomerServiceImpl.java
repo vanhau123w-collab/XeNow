@@ -52,6 +52,15 @@ public class CustomerServiceImpl implements CustomerService {
     }
 
     @Override
+    public Customer findByIdentifier(String identifier) {
+        User user = userRepository.findByEmail(identifier)
+                .or(() -> userRepository.findByUsername(identifier))
+                .orElseThrow(() -> new RuntimeException("Không tìm thấy người dùng với identifier: " + identifier));
+        return customerRepository.findById(user.getUserId())
+                .orElseThrow(() -> new RuntimeException("Không tìm thấy khách hàng tương ứng"));
+    }
+
+    @Override
     @Transactional
     public Customer register(Customer customer) {
         // Check if email already exists

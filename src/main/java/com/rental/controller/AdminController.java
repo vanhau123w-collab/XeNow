@@ -145,14 +145,21 @@ public class AdminController {
         }
     }
 
+    @org.springframework.transaction.annotation.Transactional(readOnly = true)
     @GetMapping("/customers")
     public ResponseEntity<ApiResponse<Page<CustomerDTO>>> allCustomers(
             @RequestParam(defaultValue = "0") int page,
             @RequestParam(defaultValue = "10") int size) {
-        Pageable pageable = PageRequest.of(page, size, Sort.by("customerId").descending());
-        Page<CustomerDTO> customers = customerService.getAll(pageable)
-                .map(this::convertToCustomerDTO);
-        return ResponseEntity.ok(ApiResponse.success(customers, "Lấy danh sách khách hàng thành công"));
+        try {
+            Pageable pageable = PageRequest.of(page, size, Sort.by("userId").descending());
+            Page<CustomerDTO> customers = customerService.getAll(pageable)
+                    .map(this::convertToCustomerDTO);
+            return ResponseEntity.ok(ApiResponse.success(customers, "Lấy danh sách khách hàng thành công"));
+        } catch (Exception e) {
+            e.printStackTrace();
+            return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR)
+                    .body(ApiResponse.error("Lỗi khi lấy danh sách khách hàng: " + e.getMessage()));
+        }
     }
 
 
@@ -542,15 +549,25 @@ public class AdminController {
     }
 
     private CustomerDTO convertToCustomerDTO(Customer customer) {
+        if (customer == null) return null;
         CustomerDTO dto = new CustomerDTO();
         dto.setUserId(customer.getUserId());
-        dto.setCustomerId(customer.getCustomerId());
-        dto.setName(customer.getName());
-        dto.setFullName(customer.getName());
-        dto.setEmail(customer.getEmail());
-        dto.setPhone(customer.getPhone());
+        dto.setCustomerId(customer.getUserId());
+        
+        User u = customer.getUser();
+        if (u != null) {
+            dto.setName(u.getFullName());
+            dto.setFullName(u.getFullName());
+            dto.setEmail(u.getEmail());
+            dto.setPhone(u.getPhone());
+        } else {
+            dto.setName("N/A");
+            dto.setFullName("Chưa cập nhật");
+        }
+        
         dto.setIdentityCard(customer.getIdentityCard());
         dto.setDriverLicense(customer.getDriverLicense());
+        
         if (customer.getDriverLicenseExpiry() != null) {
             dto.setDriverLicenseExpiry(customer.getDriverLicenseExpiry().toString());
         }

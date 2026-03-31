@@ -30,7 +30,7 @@ public class Role {
     @Column(name = "DeletedAt")
     private LocalDateTime deletedAt;
 
-    @ManyToMany(mappedBy = "roles", fetch = FetchType.LAZY)
+    @OneToMany(mappedBy = "role", fetch = FetchType.LAZY)
     @JsonIgnore
     private List<User> users;
 

@@ -32,7 +32,7 @@ public class Customer {
         return user != null ? user.getPhone() : null;
     }
 
-    @OneToOne(fetch = FetchType.LAZY)
+    @OneToOne(fetch = FetchType.EAGER)
     @MapsId
     @JoinColumn(name = "UserID")
     private User user;

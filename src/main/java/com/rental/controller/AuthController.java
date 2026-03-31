@@ -53,7 +53,7 @@ public class AuthController {
                 .orElseThrow(() -> new ResourceNotFoundException("Role CUSTOMER không tồn tại"));
 
         user.setPassword(passwordEncoder.encode(user.getPassword()));
-        user.setRoles(List.of(customerRole));
+        user.setRole(customerRole);
         user.setStatus(User.Status.Active);
 
         User savedUser = userRepository.save(user);
@@ -100,9 +100,13 @@ public class AuthController {
                     .body(ApiResponse.error("Tài khoản không có quyền truy cập"));
         }
 
-        String roleStr = (user.getRoles() != null && !user.getRoles().isEmpty())
-                ? user.getRoles().get(0).getRoleName()
+        String rawRole = (user.getRole() != null)
+                ? user.getRole().getRoleName()
                 : "CUSTOMER";
+        
+        // Strip ROLE_ prefix if present to avoid double prefixing with JwtAuthenticationConverter
+        String roleStr = rawRole.startsWith("ROLE_") ? rawRole.substring(5) : rawRole;
+        
         String accessToken = jwtUtil.generateAccessToken(user.getUsername(), roleStr, user.getUserId());
         String refreshTokenStr = jwtUtil.generateRefreshToken(user.getUsername());
 
@@ -153,8 +157,8 @@ public class AuthController {
                     }
 
                     User user = tokenEntity.getUser();
-                    String roleStr = (user.getRoles() != null && !user.getRoles().isEmpty())
-                            ? user.getRoles().get(0).getRoleName()
+                    String roleStr = (user.getRole() != null)
+                            ? user.getRole().getRoleName()
                             : "CUSTOMER";
 
                     String newAccessToken = jwtUtil.generateAccessToken(user.getUsername(), roleStr, user.getUserId());
@@ -232,7 +236,7 @@ public class AuthController {
                     .body(ApiResponse.error("Không tìm thấy người dùng"));
         }
 
-        String roleStr = (user.getRoles() != null && !user.getRoles().isEmpty()) ? user.getRoles().get(0).getRoleName()
+        String roleStr = (user.getRole() != null) ? user.getRole().getRoleName()
                 : "CUSTOMER";
         Map<String, Object> data = new HashMap<>();
         data.put("user", buildUserMap(user, roleStr));
@@ -246,6 +250,7 @@ public class AuthController {
         userMap.put("userId", user.getUserId());
         userMap.put("username", user.getUsername());
         userMap.put("fullName", user.getFullName());
+        userMap.put("name", user.getFullName()); // Added for frontend compatibility
         userMap.put("email", user.getEmail());
         userMap.put("phone", user.getPhone());
         userMap.put("address", user.getAddress());

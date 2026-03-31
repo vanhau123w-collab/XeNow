@@ -125,13 +125,6 @@ public class VehicleController {
             dto.setLocationName(locationName);
         }
         
-        // Images logic from AdminController
-        if (vehicle.getImages() != null && !vehicle.getImages().isEmpty()) {
-            List<com.rental.dto.VehicleImageDTO> imgDTOs = vehicle.getImages().stream()
-                .map(img -> com.rental.dto.VehicleImageDTO.builder()
-                    .imageId(img.getImageId())
-                    .imageUrl(img.getImageUrl())
-                    .isPrimary(img.getIsPrimary())
         // Images from database
         if (vehicle.getImages() != null && !vehicle.getImages().isEmpty()) {
             List<VehicleImageDTO> imgDTOs = vehicle.getImages().stream()
@@ -144,16 +137,11 @@ public class VehicleController {
             dto.setImages(imgDTOs);
             
             String primaryUrl = imgDTOs.stream()
-                .filter(com.rental.dto.VehicleImageDTO::getIsPrimary)
-                .map(com.rental.dto.VehicleImageDTO::getImageUrl)
-                .findFirst()
-                .orElse(imgDTOs.get(0).getImageUrl());
-            // Set primary image URL for main display
-            String primaryUrl = imgDTOs.stream()
-                .filter(img -> Boolean.TRUE.equals(img.getIsPrimary()))
+                .filter(VehicleImageDTO::getIsPrimary)
                 .map(VehicleImageDTO::getImageUrl)
                 .findFirst()
-                .orElse(imgDTOs.isEmpty() ? "/images/car-toyota-camry.webp" : imgDTOs.get(0).getImageUrl());
+                .orElse(imgDTOs.get(0).getImageUrl());
+            
             dto.setImage(primaryUrl);
         } else {
             dto.setImage("/images/car-toyota-camry.webp");

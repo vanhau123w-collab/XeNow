@@ -32,11 +32,17 @@ public class BookingController {
     private final CustomerService customerService;
     private final LocationRepository locationRepository;
 
+    @GetMapping("/{id}")
+    public ResponseEntity<ApiResponse<BookingDTO>> getBookingById(@PathVariable Integer id) {
+        Booking booking = bookingService.getById(id);
+        return ResponseEntity.ok(ApiResponse.success(convertToDTO(booking), "Lấy thông tin đơn đặt xe thành công"));
+    }
+
     @GetMapping("/my-bookings")
     public ResponseEntity<ApiResponse<Page<BookingDTO>>> myBookings(
-            @PageableDefault(size = 5) Pageable pageable,
+            @PageableDefault(size = 50) Pageable pageable,
             Authentication authentication) {
-        Customer customer = customerService.findByEmail(authentication.getName());
+        Customer customer = customerService.findByIdentifier(authentication.getName());
         Page<BookingDTO> bookings = bookingService.getBookingsByCustomer(customer.getCustomerId(), pageable)
                 .map(this::convertToDTO);
         return ResponseEntity.ok(ApiResponse.success(bookings, "Lấy danh sách lịch thuê của bạn thành công"));
@@ -50,7 +56,7 @@ public class BookingController {
             @RequestBody BookingRequestDTO request,
             Authentication authentication) {
         try {
-            Customer customer = customerService.findByEmail(authentication.getName());
+            Customer customer = customerService.findByIdentifier(authentication.getName());
             
             Booking booking = new Booking();
             booking.setCustomer(customer);
@@ -64,8 +70,6 @@ public class BookingController {
             if (request.getReturnLocationId() != null) {
                 booking.setReturnLocation(locationRepository.findById(request.getReturnLocationId()).orElse(null));
             }
-            booking.setPickupLocation(locationRepository.findById(pickupLocationId).orElse(null));
-            booking.setReturnLocation(locationRepository.findById(returnLocationId).orElse(null));
             
             Booking saved = bookingService.createBooking(booking);
             BookingDTO dto = convertToDTO(saved);
@@ -79,22 +83,18 @@ public class BookingController {
                     .body(ApiResponse.created(dto, "Đặt xe thành công!"));
         } catch (Exception e) {
             e.printStackTrace(); // Log the error for internal context
-            return ResponseEntity.badRequest().body(java.util.Collections.singletonMap("message", "Lỗi tạo đơn đặt xe: " + e.getMessage()));
+            return ResponseEntity.badRequest().body(ApiResponse.error("Lỗi tạo đơn đặt xe: " + e.getMessage()));
         }
     }
 
     @PostMapping("/{id}/confirm-payment")
-    public ResponseEntity<?> confirmPayment(@PathVariable Integer id) {
+    public ResponseEntity<ApiResponse<BookingDTO>> confirmPayment(@PathVariable Integer id) {
         try {
             Booking booking = bookingService.updateStatus(id, Booking.Status.Confirmed);
-            return ResponseEntity.ok(convertToDTO(booking));
+            return ResponseEntity.ok(ApiResponse.success(convertToDTO(booking), "Thanh toán thành công"));
         } catch (Exception e) {
-            return ResponseEntity.badRequest().body(java.util.Collections.singletonMap("message", e.getMessage()));
             return ResponseEntity.status(HttpStatus.BAD_REQUEST)
-                    .body(ApiResponse.<BookingDTO>builder()
-                            .success(false)
-                            .message("Đặt xe thất bại: " + e.getMessage())
-                            .build());
+                    .body(ApiResponse.error("Đặt xe thất bại: " + e.getMessage()));
         }
     }
 

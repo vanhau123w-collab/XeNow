@@ -88,7 +88,7 @@ public class DataSeeder implements CommandLineRunner {
                     .email("admin@xenow.vn")
                     .phone("0900000000")
                     .status(User.Status.Active)
-                    .roles(List.of(roleRepo.findByRoleName("ADMIN").get()))
+                    .role(roleRepo.findByRoleName("ADMIN").get())
                     .build());
         }
 
@@ -101,7 +101,7 @@ public class DataSeeder implements CommandLineRunner {
                     .email("khach1@xenow.vn")
                     .phone("0987654321")
                     .status(User.Status.Active)
-                    .roles(List.of(roleRepo.findByRoleName("CUSTOMER").get()))
+                    .role(roleRepo.findByRoleName("CUSTOMER").get())
                     .build());
             
             Customer customer = customerRepo.save(Customer.builder()

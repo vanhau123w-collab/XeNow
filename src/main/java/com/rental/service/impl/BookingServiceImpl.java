@@ -34,12 +34,12 @@ public class BookingServiceImpl implements BookingService {
 
     @Override
     public List<Booking> getBookingsByCustomer(Integer userId) {
-        return bookingRepository.findByCustomerUserId(userId);
+        return bookingRepository.findByCustomer_UserIdOrderByStartDateDesc(userId);
     }
 
     @Override
     public Page<Booking> getBookingsByCustomer(Integer userId, Pageable pageable) {
-        return bookingRepository.findByCustomerUserId(userId, pageable);
+        return bookingRepository.findByCustomer_UserIdOrderByStartDateDesc(userId, pageable);
     }
 
     @Override
