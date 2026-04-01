@@ -3,7 +3,6 @@ package com.rental.entity;
 import jakarta.persistence.*;
 import lombok.*;
 import java.math.BigDecimal;
-import java.time.LocalDateTime;
 
 @Entity
 @Table(name = "Vehicle")
@@ -118,6 +117,6 @@ public class Vehicle {
     @Builder.Default
     private java.util.List<VehicleImage> images = new java.util.ArrayList<>();
 
-    @Column(name = "DeletedAt")
-    private LocalDateTime deletedAt;
+    @Column(name = "EngineCapacity")
+    private Integer engineCapacity;
 }

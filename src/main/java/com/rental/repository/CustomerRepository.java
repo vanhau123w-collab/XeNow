@@ -17,5 +17,4 @@ public interface CustomerRepository extends JpaRepository<Customer, Integer> {
 
     Optional<Customer> findByIdentityCard(String identityCard);
     boolean existsByIdentityCard(String identityCard);
-    boolean existsByDriverLicense(String driverLicense);
 }

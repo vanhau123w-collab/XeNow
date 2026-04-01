@@ -34,13 +34,11 @@ public class Booking {
     @JoinColumn(name = "ApprovedBy")
     private User approvedBy;
 
-    @ManyToOne(fetch = FetchType.LAZY)
-    @JoinColumn(name = "PickupLocationID")
-    private Location pickupLocation;
+    @Column(name = "PickupAddress", length = 500)
+    private String pickupAddress;
 
-    @ManyToOne(fetch = FetchType.LAZY)
-    @JoinColumn(name = "ReturnLocationID")
-    private Location returnLocation;
+    @Column(name = "ReturnAddress", length = 500)
+    private String returnAddress;
 
     @Column(name = "StartDate", nullable = false)
     private LocalDateTime startDate;

@@ -107,7 +107,6 @@ public class DataSeeder implements CommandLineRunner {
             Customer customer = customerRepo.save(Customer.builder()
                     .user(customerUser)
                     .identityCard("001099123456")
-                    .driverLicense("GPLX123456")
                     .address("456 Lê Lợi, TP.HCM")
                     .build());
 

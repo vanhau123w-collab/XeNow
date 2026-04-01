@@ -96,9 +96,10 @@ public class AdminController {
     public ResponseEntity<ApiResponse<Object>> updateBookingStatus(@PathVariable Integer id,
             @RequestParam String status,
             @RequestParam(required = false) Integer mileage,
-            @RequestParam(required = false) String note) {
+            @RequestParam(required = false) String note,
+            @RequestParam(required = false) String returnPaymentMethod) {
         try {
-            bookingService.updateStatus(id, Booking.Status.valueOf(status), mileage, note);
+            bookingService.updateStatus(id, Booking.Status.valueOf(status), mileage, note, returnPaymentMethod);
             return ResponseEntity.ok(ApiResponse.success(null, "Cập nhật trạng thái thành công!"));
         } catch (Exception e) {
             return ResponseEntity.status(HttpStatus.BAD_REQUEST)
@@ -439,6 +440,7 @@ public class AdminController {
         v.setSeats(dto.getSeats() != null ? dto.getSeats() : 4);
         v.setFuelType(dto.getFuel() != null ? dto.getFuel() : (dto.getFuelType() != null ? dto.getFuelType() : "Xăng"));
         v.setTransmission(dto.getTransmission() != null ? dto.getTransmission() : "Tự động");
+        v.setEngineCapacity(dto.getEngineCapacity());
 
         if (dto.getVehicleId() == null) {
             v.setStatus(Vehicle.Status.Available);
@@ -472,12 +474,8 @@ public class AdminController {
         dto.setReturnMileage(booking.getReturnMileage());
         dto.setReturnNote(booking.getReturnNote());
 
-        if (booking.getPickupLocation() != null) {
-            dto.setPickupLocationName(booking.getPickupLocation().getBranchName());
-        }
-        if (booking.getReturnLocation() != null) {
-            dto.setReturnLocationName(booking.getReturnLocation().getBranchName());
-        }
+        dto.setPickupLocationName(booking.getPickupAddress());
+        dto.setReturnLocationName(booking.getReturnAddress());
 
         return dto;
     }
@@ -522,6 +520,7 @@ public class AdminController {
         dto.setSeats(vehicle.getSeats());
         dto.setFuelType(vehicle.getFuelType());
         dto.setFuel(vehicle.getFuelType());
+        dto.setEngineCapacity(vehicle.getEngineCapacity());
         dto.setTransmission(vehicle.getTransmission());
 
         if (vehicle.getImages() != null && !vehicle.getImages().isEmpty()) {
@@ -566,11 +565,7 @@ public class AdminController {
         }
         
         dto.setIdentityCard(customer.getIdentityCard());
-        dto.setDriverLicense(customer.getDriverLicense());
-        
-        if (customer.getDriverLicenseExpiry() != null) {
-            dto.setDriverLicenseExpiry(customer.getDriverLicenseExpiry().toString());
-        }
+
         return dto;
     }
 

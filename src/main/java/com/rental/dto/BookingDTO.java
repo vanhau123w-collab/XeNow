@@ -24,4 +24,6 @@ public class BookingDTO {
     private Integer returnMileage;
     private String returnNote;
     private LocalDateTime createdAt;
+    private String paymentUrl;
+    private String vietQrUrl;
 }

@@ -7,6 +7,9 @@ import java.time.LocalDateTime;
 public class BookingRequestDTO {
     private LocalDateTime startDate;
     private LocalDateTime endDate;
-    private Integer pickupLocationId;
-    private Integer returnLocationId;
+    private String pickupAddress;
+    private String returnAddress;
+    private Integer driverLicenseId;
+    private String paymentMethod;
+    private java.math.BigDecimal paymentAmount;
 }

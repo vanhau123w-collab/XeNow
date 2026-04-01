@@ -49,15 +49,9 @@ public class Customer {
     @Column(name = "Address", length = 255)
     private String address;
 
-    @Column(name = "DriverLicense", nullable = false, unique = true, length = 20)
-    private String driverLicense;
 
-    @Column(name = "DriverLicenseClass", length = 10)
-    private String driverLicenseClass;
-
-    @Column(name = "DriverLicenseIssueDate")
-    private LocalDate driverLicenseIssueDate;
-
-    @Column(name = "DriverLicenseExpiry")
-    private LocalDate driverLicenseExpiry;
+    @OneToMany(mappedBy = "customer", cascade = CascadeType.ALL, orphanRemoval = true, fetch = FetchType.LAZY)
+    @ToString.Exclude
+    @Builder.Default
+    private java.util.List<DriverLicense> driverLicenses = new java.util.ArrayList<>();
 }

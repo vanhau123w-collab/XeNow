@@ -23,7 +23,7 @@ public interface BookingService {
     Page<Booking> getBookingsByStatus(Booking.Status status, Pageable pageable);
     Booking getById(Integer id);
     Booking createBooking(Booking booking);
-    Booking updateStatus(Integer bookingId, Booking.Status newStatus, Integer mileage, String note);
+    Booking updateStatus(Integer bookingId, Booking.Status newStatus, Integer mileage, String note, String returnPaymentMethod);
     Booking updateStatus(Integer bookingId, Booking.Status newStatus);
 }
 

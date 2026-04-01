@@ -35,4 +35,5 @@ public class VehicleDTO {
     private String transmission;
     private String image;
     private java.util.List<VehicleImageDTO> images;
+    private Integer engineCapacity;
 }

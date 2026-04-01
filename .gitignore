@@ -23,3 +23,7 @@ bin/
 Thumbs.db
 # Environment variables
 .env
+
+# Ignored uploads
+uploads/licenses/
+
