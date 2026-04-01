@@ -1,17 +1,21 @@
 package com.rental.controller;
 
 import com.rental.dto.ApiResponse;
+import com.rental.entity.Role;
 import com.rental.entity.User;
 import com.rental.exception.DuplicateResourceException;
 import com.rental.exception.ResourceNotFoundException;
+import com.rental.repository.RoleRepository;
 import com.rental.repository.UserRepository;
 import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
 import org.springframework.http.ResponseEntity;
+import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.web.bind.annotation.*;
 import org.springframework.web.servlet.support.ServletUriComponentsBuilder;
 
 import java.net.URI;
+import java.util.Collections;
 import java.util.List;
 
 @RestController
@@ -22,6 +26,8 @@ import java.util.List;
 public class UserController {
 
     private final UserRepository userRepository;
+    private final RoleRepository roleRepository;
+    private final PasswordEncoder passwordEncoder;
 
     @PutMapping("/me")
     public ResponseEntity<ApiResponse<Object>> updateMe(
@@ -62,6 +68,23 @@ public class UserController {
             throw new DuplicateResourceException("Email đã tồn tại: " + user.getEmail());
         }
 
+        if (user.getPassword() != null && !user.getPassword().isBlank()) {
+            user.setPassword(passwordEncoder.encode(user.getPassword()));
+        }
+
+        if (user.getRoles() == null || user.getRoles().isEmpty()) {
+            Role customerRole = roleRepository.findByName("CUSTOMER")
+                    .orElseGet(() -> roleRepository.save(Role.builder()
+                            .name("CUSTOMER")
+                            .description("Khách hàng")
+                            .build()));
+            user.setRoles(Collections.singleton(customerRole));
+        }
+
+        if (user.getStatus() == null) {
+            user.setStatus(User.Status.Active);
+        }
+
         User saved = userRepository.save(user);
         URI location = ServletUriComponentsBuilder.fromCurrentRequest()
                 .path("/{id}")
@@ -83,11 +106,11 @@ public class UserController {
                     existingUser.setGender(userDetails.getGender());
                     existingUser.setDateOfBirth(userDetails.getDateOfBirth());
                     existingUser.setStatus(userDetails.getStatus());
-                    
+
                     return userRepository.save(existingUser);
                 })
                 .orElseThrow(() -> new ResourceNotFoundException("Không tìm thấy người dùng để cập nhật với mã: " + id));
-        
+
         return ResponseEntity.ok(ApiResponse.success(updated, "Cập nhật thông tin người dùng thành công"));
     }
 
@@ -95,9 +118,8 @@ public class UserController {
     public ResponseEntity<ApiResponse<Void>> deleteUser(@PathVariable Integer id) {
         User user = userRepository.findById(id)
                 .orElseThrow(() -> new ResourceNotFoundException("Không tìm thấy người dùng để xóa với mã: " + id));
-        
+
         userRepository.delete(user);
         return ResponseEntity.noContent().build();
     }
 }
-

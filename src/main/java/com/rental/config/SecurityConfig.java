@@ -2,6 +2,8 @@ package com.rental.config;
 
 import com.nimbusds.jose.jwk.source.ImmutableSecret;
 import com.rental.repository.UserRepository;
+import com.rental.entity.Role;
+import com.rental.security.PermissionAuthorizationManager;
 import lombok.RequiredArgsConstructor;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.context.annotation.Bean;
@@ -22,7 +24,6 @@ import org.springframework.security.oauth2.jwt.JwtEncoder;
 import org.springframework.security.oauth2.jwt.NimbusJwtDecoder;
 import org.springframework.security.oauth2.jwt.NimbusJwtEncoder;
 import org.springframework.security.oauth2.server.resource.authentication.JwtAuthenticationConverter;
-import org.springframework.security.oauth2.server.resource.authentication.JwtGrantedAuthoritiesConverter;
 import org.springframework.security.web.SecurityFilterChain;
 import org.springframework.web.cors.CorsConfiguration;
 import org.springframework.web.cors.CorsConfigurationSource;
@@ -41,6 +42,7 @@ import java.util.Arrays;
 public class SecurityConfig {
 
     private final UserRepository userRepository;
+    private final PermissionAuthorizationManager permissionAuthorizationManager;
 
     @Value("${jwt.secret}")
     private String jwtSecret;
@@ -48,27 +50,37 @@ public class SecurityConfig {
     @Bean
     public SecurityFilterChain filterChain(HttpSecurity http) throws Exception {
         http
-            .csrf(AbstractHttpConfigurer::disable)
-            .cors(cors -> cors.configurationSource(corsConfigurationSource()))
-            .sessionManagement(session -> session.sessionCreationPolicy(SessionCreationPolicy.STATELESS))
-            .authorizeHttpRequests(auth -> auth
-                .requestMatchers(HttpMethod.OPTIONS, "/**").permitAll()
-                .requestMatchers("/", "/index.html", "/static/**", "/css/**", "/js/**", "/images/**", "/uploads/**").permitAll()
-                .requestMatchers("/api/auth/**", "/api/admin/rescue-password").permitAll()
-                .requestMatchers(HttpMethod.GET, "/api/vehicles/**", "/api/brands/**", "/api/models/**", "/api/branches/**", "/api/locations/**").permitAll()
-                .requestMatchers("/api/admin/**").hasAuthority("ROLE_ADMIN")
-                .requestMatchers("/api/bookings/**", "/api/customer/**").hasAnyAuthority("ROLE_CUSTOMER", "ROLE_ADMIN", "ROLE_STAFF")
-                .anyRequest().authenticated()
-            )
-            .oauth2ResourceServer(oauth2 -> oauth2
-                .jwt(jwt -> jwt.jwtAuthenticationConverter(jwtAuthenticationConverter())))
-            .exceptionHandling(ex -> ex
-                .authenticationEntryPoint((request, response, authException) -> {
-                    response.setStatus(401);
-                    response.setContentType("application/json;charset=UTF-8");
-                    response.getWriter().write("{\"message\":\"Bạn cần đăng nhập để thực hiện hành động này\"}");
-                })
-            );
+                .csrf(AbstractHttpConfigurer::disable)
+                .cors(cors -> cors.configurationSource(corsConfigurationSource()))
+                .sessionManagement(session -> session.sessionCreationPolicy(SessionCreationPolicy.STATELESS))
+                .authorizeHttpRequests(auth -> auth
+                        // Public endpoints — no auth required
+                        .requestMatchers(HttpMethod.OPTIONS, "/**").permitAll()
+                        .requestMatchers("/", "/index.html", "/static/**", "/css/**", "/js/**", "/images/**",
+                                "/uploads/**")
+                        .permitAll()
+                        .requestMatchers("/api/auth/**", "/api/admin/rescue-password").permitAll()
+                        .requestMatchers(HttpMethod.GET, "/api/vehicles/**", "/api/brands/**", "/api/models/**",
+                                "/api/branches/**", "/api/locations/**")
+                        .permitAll()
+
+                        // All other requests → check dynamically via PermissionAuthorizationManager
+                        .anyRequest().access(permissionAuthorizationManager))
+                .oauth2ResourceServer(oauth2 -> oauth2
+                        .jwt(jwt -> jwt.jwtAuthenticationConverter(jwtAuthenticationConverter())))
+                .exceptionHandling(ex -> ex
+                        .authenticationEntryPoint((request, response, authException) -> {
+                            response.setStatus(401);
+                            response.setContentType("application/json;charset=UTF-8");
+                            response.getWriter()
+                                    .write("{\"message\":\"Bạn cần đăng nhập để thực hiện hành động này\"}");
+                        })
+                        .accessDeniedHandler((request, response, accessDeniedException) -> {
+                            response.setStatus(403);
+                            response.setContentType("application/json;charset=UTF-8");
+                            response.getWriter()
+                                    .write("{\"message\":\"Bạn không có quyền truy cập tài nguyên này\"}");
+                        }));
 
         return http.build();
     }
@@ -78,7 +90,6 @@ public class SecurityConfig {
         return new WebMvcConfigurer() {
             @Override
             public void addResourceHandlers(ResourceHandlerRegistry registry) {
-                // Đảm bảo Spring phục vụ static files từ thư mục uploads vật lý
                 registry.addResourceHandler("/uploads/**")
                         .addResourceLocations("file:uploads/");
             }
@@ -92,25 +103,55 @@ public class SecurityConfig {
                     .or(() -> userRepository.findByEmail(username))
                     .orElseThrow(() -> new UsernameNotFoundException("Không tìm thấy tài khoản: " + username));
 
-            String role = (user.getRole() != null)
-                    ? user.getRole().getRoleName()
-                    : "CUSTOMER";
+            String[] roles = user.getRoles().stream()
+                    .map(Role::getName)
+                    .toArray(String[]::new);
+
+            if (roles.length == 0) {
+                roles = new String[]{"CUSTOMER"};
+            }
 
             return User.withUsername(user.getUsername())
                     .password(user.getPassword())
-                    .roles(role)
+                    .roles(roles)
                     .build();
         };
     }
 
     @Bean
     public JwtAuthenticationConverter jwtAuthenticationConverter() {
-        JwtGrantedAuthoritiesConverter grantedAuthoritiesConverter = new JwtGrantedAuthoritiesConverter();
-        grantedAuthoritiesConverter.setAuthorityPrefix("ROLE_");
-        grantedAuthoritiesConverter.setAuthoritiesClaimName("role");
-
         JwtAuthenticationConverter jwtAuthenticationConverter = new JwtAuthenticationConverter();
-        jwtAuthenticationConverter.setJwtGrantedAuthoritiesConverter(grantedAuthoritiesConverter);
+        jwtAuthenticationConverter.setJwtGrantedAuthoritiesConverter(jwt -> {
+            var log = org.slf4j.LoggerFactory.getLogger("JwtRoleConverter");
+
+            // Log all claims for debugging
+            log.info("[JWT-CONVERTER] Token subject: {}", jwt.getSubject());
+            log.info("[JWT-CONVERTER] All claims: {}", jwt.getClaims().keySet());
+
+            Object roleClaim = jwt.getClaim("role");
+            log.info("[JWT-CONVERTER] 'role' claim raw value: {} (type: {})",
+                    roleClaim, roleClaim != null ? roleClaim.getClass().getName() : "null");
+
+            java.util.Collection<org.springframework.security.core.GrantedAuthority> authorities =
+                    new java.util.ArrayList<>();
+
+            if (roleClaim instanceof java.util.Collection<?> roles) {
+                for (Object r : roles) {
+                    String authority = "ROLE_" + r.toString();
+                    authorities.add(new org.springframework.security.core.authority.SimpleGrantedAuthority(authority));
+                    log.info("[JWT-CONVERTER] Added authority: {}", authority);
+                }
+            } else if (roleClaim instanceof String roleStr) {
+                String authority = "ROLE_" + roleStr;
+                authorities.add(new org.springframework.security.core.authority.SimpleGrantedAuthority(authority));
+                log.info("[JWT-CONVERTER] Added authority from string: {}", authority);
+            } else {
+                log.warn("[JWT-CONVERTER] No 'role' claim found or unsupported type! Token may be stale.");
+            }
+
+            log.info("[JWT-CONVERTER] Final authorities: {}", authorities);
+            return authorities;
+        });
         return jwtAuthenticationConverter;
     }
 
@@ -138,7 +179,8 @@ public class SecurityConfig {
         CorsConfiguration configuration = new CorsConfiguration();
         configuration.setAllowedOrigins(Arrays.asList("http://localhost:5173", "http://localhost:3000"));
         configuration.setAllowedMethods(Arrays.asList("GET", "POST", "PUT", "DELETE", "OPTIONS", "PATCH"));
-        configuration.setAllowedHeaders(Arrays.asList("Authorization", "Content-Type", "Accept", "X-Requested-With", "Cache-Control"));
+        configuration.setAllowedHeaders(
+                Arrays.asList("Authorization", "Content-Type", "Accept", "X-Requested-With", "Cache-Control"));
         configuration.setAllowCredentials(true);
         configuration.setMaxAge(3600L);
 

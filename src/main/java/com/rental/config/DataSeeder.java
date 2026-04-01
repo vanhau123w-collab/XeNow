@@ -3,168 +3,289 @@ package com.rental.config;
 import com.rental.entity.*;
 import com.rental.repository.*;
 import lombok.RequiredArgsConstructor;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 import org.springframework.boot.CommandLineRunner;
 import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.stereotype.Component;
-
 import org.springframework.transaction.annotation.Transactional;
+
 import java.math.BigDecimal;
+import java.util.ArrayList;
 import java.util.List;
+import java.util.stream.Collectors;
 
 @Component
 @RequiredArgsConstructor
 public class DataSeeder implements CommandLineRunner {
 
-    private final LocationRepository locationRepo;
-    private final BrandRepository brandRepo;
-    private final ModelRepository modelRepo;
-    private final VehicleRepository vehicleRepo;
-    private final UserRepository userRepo;
-    private final RoleRepository roleRepo;
-    private final CustomerRepository customerRepo;
-    private final BookingRepository bookingRepo;
-    private final PasswordEncoder passwordEncoder;
+        private static final Logger log = LoggerFactory.getLogger(DataSeeder.class);
+        private static final String DEFAULT_PASSWORD = "admin123";
 
-    @Override
-    @Transactional
-    public void run(String... args) throws Exception {
-        if (userRepo.count() > 0) return; // Chỉ seed lần đầu
+        private final PermissionRepository permissionRepository;
+        private final RoleRepository roleRepository;
+        private final UserRepository userRepository;
+        private final LocationRepository locationRepository;
+        private final BrandRepository brandRepository;
+        private final ModelRepository modelRepository;
+        private final VehicleRepository vehicleRepository;
+        private final CustomerRepository customerRepository;
+        private final PasswordEncoder passwordEncoder;
 
-        // Roles - kiểm tra trước khi tạo
-        roleRepo.findByRoleName("ADMIN")
-                .orElseGet(() -> roleRepo.save(Role.builder().roleName("ADMIN").build()));
-        roleRepo.findByRoleName("STAFF")
-                .orElseGet(() -> roleRepo.save(Role.builder().roleName("STAFF").build()));
-        roleRepo.findByRoleName("CUSTOMER")
-                .orElseGet(() -> roleRepo.save(Role.builder().roleName("CUSTOMER").build()));
+        @Override
+        @Transactional
+        public void run(String... args) {
+                if (userRepository.count() > 0) {
+                        log.info(">>> Database already seeded — skipping");
+                        return;
+                }
 
+                log.info(">>> Seeding database...");
 
+                List<Permission> permissions = seedPermissions();
+                List<Role> roles = seedRoles(permissions);
+                seedUsers(roles);
+                seedBusinessData();
 
-        // Locations
-        if (locationRepo.count() == 0) {
-            Location hcm = locationRepo.save(Location.builder()
-                    .branchName("Chi nhánh TP. Hồ Chí Minh")
-                    .address("123 Nguyễn Huệ").city("TP. Hồ Chí Minh").phone("0281234567").build());
-            Location hn = locationRepo.save(Location.builder()
-                    .branchName("Chi nhánh Hà Nội")
-                    .address("45 Hoàn Kiếm").city("Hà Nội").phone("0241234567").build());
-            Location dn = locationRepo.save(Location.builder()
-                    .branchName("Chi nhánh Đà Nẵng")
-                    .address("78 Bạch Đằng").city("Đà Nẵng").phone("0236123456").build());
-
-            // Brands
-            Brand toyota = brandRepo.save(Brand.builder().brandName("Toyota").build());
-            Brand honda = brandRepo.save(Brand.builder().brandName("Honda").build());
-            Brand mazda = brandRepo.save(Brand.builder().brandName("Mazda").build());
-            Brand ford = brandRepo.save(Brand.builder().brandName("Ford").build());
-
-            // Models
-            Model vios = modelRepo.save(Model.builder().modelName("Vios").brand(toyota).build());
-            Model crv = modelRepo.save(Model.builder().modelName("CR-V").brand(honda).build());
-            Model m3 = modelRepo.save(Model.builder().modelName("Mazda 3").brand(mazda).build());
-            Model everest = modelRepo.save(Model.builder().modelName("Everest").brand(ford).build());
-
-            // Vehicles
-            vehicleRepo.save(Vehicle.builder().type("Xe Ô Tô").currentLocation(hcm).licensePlate("51A-12345")
-                    .model(vios).manufactureYear(2022).mileage(15000)
-                    .pricePerDay(new BigDecimal("600000")).status(Vehicle.Status.Available).build());
-            vehicleRepo.save(Vehicle.builder().type("Xe Ô Tô").currentLocation(hcm).licensePlate("51B-67890")
-                    .model(crv).manufactureYear(2023).mileage(8000)
-                    .pricePerDay(new BigDecimal("1200000")).status(Vehicle.Status.Available).build());
-            vehicleRepo.save(Vehicle.builder().type("Xe Ô Tô").currentLocation(hn).licensePlate("29H-11111")
-                    .model(m3).manufactureYear(2023).mileage(5000)
-                    .pricePerDay(new BigDecimal("800000")).status(Vehicle.Status.Available).build());
-            vehicleRepo.save(Vehicle.builder().type("Xe Ô Tô").currentLocation(dn).licensePlate("43A-22222")
-                    .model(everest).manufactureYear(2022).mileage(20000)
-                    .pricePerDay(new BigDecimal("1500000")).status(Vehicle.Status.Available).build());
+                log.info(">>> Database seeded successfully");
         }
 
-        // Admin user
-        if (!userRepo.findByUsername("admin").isPresent()) {
-            userRepo.save(User.builder()
-                    .username("admin")
-                    .password(passwordEncoder.encode("admin123"))
-                    .fullName("Quản trị viên")
-                    .email("admin@xenow.vn")
-                    .phone("0900000000")
-                    .status(User.Status.Active)
-                    .role(roleRepo.findByRoleName("ADMIN").get())
-                    .build());
+        private List<Permission> seedPermissions() {
+                List<Permission> permissions = new ArrayList<>();
+
+                // ===== USER admin module: /api/admin/users =====
+                permissions.add(createPermission("ADMIN_VIEW_ALL_USER", "/api/admin/users", "GET", "USER"));
+                permissions.add(createPermission("ADMIN_UPDATE_USER_STATUS", "/api/admin/users/*/status", "POST", "USER"));
+                permissions.add(createPermission("ADMIN_UPDATE_USER_ROLES", "/api/admin/users/*/roles", "POST", "USER"));
+                // Fallback CRUD for general /api/users (used by regular users/profile)
+                addCrudPermissions(permissions, "USER", "/api/users");
+
+                // ===== CUSTOMER admin module: /api/admin/customers =====
+                permissions.add(createPermission("VIEW_ALL_CUSTOMER", "/api/admin/customers", "GET", "CUSTOMER"));
+                // CUSTOMER self-service module: /api/customer
+                permissions.add(createPermission("VIEW_CUSTOMER", "/api/customer/**", "GET", "CUSTOMER"));
+                permissions.add(createPermission("VERIFY_CUSTOMER", "/api/customer/verify", "POST", "CUSTOMER"));
+                permissions.add(createPermission("UPDATE_CUSTOMER_SELF", "/api/customer/**", "PUT", "CUSTOMER"));
+
+                // ===== BOOKING module: /api/bookings =====
+                permissions.add(createPermission("CREATE_BOOKING", "/api/bookings", "POST", "BOOKING"));
+                permissions.add(createPermission("VIEW_ALL_BOOKING", "/api/bookings/**", "GET", "BOOKING"));
+                permissions.add(createPermission("VIEW_BOOKING", "/api/bookings/{id}", "GET", "BOOKING"));
+                permissions.add(createPermission("UPDATE_BOOKING", "/api/bookings/**", "PUT", "BOOKING"));
+                permissions.add(createPermission("CANCEL_BOOKING", "/api/bookings/*/cancel", "POST", "BOOKING"));
+                // Admin booking management
+                permissions.add(createPermission("ADMIN_VIEW_ALL_BOOKING", "/api/admin/bookings", "GET", "BOOKING"));
+                permissions.add(createPermission("ADMIN_UPDATE_BOOKING_STATUS", "/api/admin/bookings/*/status", "POST",
+                                "BOOKING"));
+
+                // ===== BRANCH (Location) admin module: /api/admin/locations =====
+                addCrudPermissions(permissions, "BRANCH", "/api/admin/locations");
+                permissions.add(createPermission("VIEW_ALL_PUBLIC_BRANCH", "/api/locations", "GET", "BRANCH"));
+
+                // ===== BRAND admin module: /api/admin/brands =====
+                addCrudPermissions(permissions, "BRAND", "/api/admin/brands");
+
+                // ===== MODEL admin module: /api/admin/models =====
+                addCrudPermissions(permissions, "MODEL", "/api/admin/models");
+
+                // ===== VEHICLE admin module: /api/admin/vehicles =====
+                addCrudPermissions(permissions, "VEHICLE", "/api/admin/vehicles");
+                permissions.add(createPermission("VIEW_ALL_PUBLIC_VEHICLE", "/api/vehicles", "GET", "VEHICLE"));
+                permissions.add(createPermission("VIEW_PUBLIC_VEHICLE", "/api/vehicles/{id}", "GET", "VEHICLE"));
+                // Vehicle management extras
+                permissions.add(createPermission("UPLOAD_VEHICLE_IMAGE", "/api/admin/vehicles/*/images", "POST",
+                                "VEHICLE"));
+                permissions.add(createPermission("DELETE_VEHICLE_IMAGE", "/api/admin/vehicles/images/*", "DELETE",
+                                "VEHICLE"));
+                permissions.add(createPermission("SET_PRIMARY_IMAGE", "/api/admin/vehicles/images/*/primary", "PUT",
+                                "VEHICLE"));
+                permissions.add(createPermission("UPDATE_VEHICLE_STATUS", "/api/admin/vehicles/*/status", "POST",
+                                "VEHICLE"));
+                permissions.add(createPermission("COMPLETE_MAINTENANCE", "/api/admin/vehicles/*/maintenance/complete",
+                                "POST", "VEHICLE"));
+
+                // ===== DASHBOARD module =====
+                permissions.add(createPermission("VIEW_DASHBOARD", "/api/admin/dashboard", "GET", "DASHBOARD"));
+
+                // ===== REPORT module =====
+                permissions.add(createPermission("VIEW_REPORT", "/api/admin/reports", "GET", "REPORT"));
+
+                // ===== PERMISSION module: /api/permissions =====
+                addCrudPermissions(permissions, "PERMISSION", "/api/permissions");
+
+                // ===== ROLE module: /api/roles =====
+                addCrudPermissions(permissions, "ROLE", "/api/roles");
+
+                List<Permission> saved = permissionRepository.saveAll(permissions);
+                permissionRepository.flush();
+                log.info("Seeded {} permissions", saved.size());
+                return saved;
         }
 
-        // Sample Customer
-        if (!userRepo.findByUsername("customer1").isPresent()) {
-            User customerUser = userRepo.save(User.builder()
-                    .username("customer1")
-                    .password(passwordEncoder.encode("customer123"))
-                    .fullName("Nguyễn Văn Khách")
-                    .email("khach1@xenow.vn")
-                    .phone("0987654321")
-                    .status(User.Status.Active)
-                    .role(roleRepo.findByRoleName("CUSTOMER").get())
-                    .build());
-            
-            Customer customer = customerRepo.save(Customer.builder()
-                    .user(customerUser)
-                    .identityCard("001099123456")
-                    .address("456 Lê Lợi, TP.HCM")
-                    .build());
-
-            // Sample Bookings
-            java.time.LocalDateTime now = java.time.LocalDateTime.now();
-            List<Vehicle> allVehicles = vehicleRepo.findAll();
-            
-            if (!allVehicles.isEmpty()) {
-                // 1. Pending Booking
-                bookingRepo.save(Booking.builder()
-                        .customer(customer)
-                        .vehicle(allVehicles.get(0))
-                        .startDate(now.plusDays(1))
-                        .endDate(now.plusDays(3))
-                        .totalPrice(new BigDecimal("1200000"))
-                        .status(Booking.Status.Pending)
-                        .build());
-
-                // 2. Confirmed Booking
-                bookingRepo.save(Booking.builder()
-                        .customer(customer)
-                        .vehicle(allVehicles.get(1))
-                        .startDate(now.minusDays(1))
-                        .endDate(now.plusDays(2))
-                        .totalPrice(new BigDecimal("3600000"))
-                        .status(Booking.Status.Confirmed)
-                        .build());
-
-                // 3. Ongoing Booking (Vehicle should be Rented)
-                Vehicle v2 = allVehicles.get(2);
-                v2.setStatus(Vehicle.Status.Rented);
-                vehicleRepo.save(v2);
-
-                bookingRepo.save(Booking.builder()
-                        .customer(customer)
-                        .vehicle(v2)
-                        .startDate(now.minusDays(2))
-                        .endDate(now.plusDays(1))
-                        .totalPrice(new BigDecimal("1600000"))
-                        .status(Booking.Status.Ongoing)
-                        .build());
-                
-                // 4. Completed Booking
-                bookingRepo.save(Booking.builder()
-                        .customer(customer)
-                        .vehicle(allVehicles.get(3))
-                        .startDate(now.minusDays(10))
-                        .endDate(now.minusDays(7))
-                        .totalPrice(new BigDecimal("4500000"))
-                        .status(Booking.Status.Completed)
-                        .returnMileage(20500)
-                        .returnNote("Xe trả đúng hạn, sạch sẽ.")
-                        .build());
-            }
+        private void addCrudPermissions(List<Permission> list, String module, String basePath) {
+                list.add(createPermission("CREATE_" + module, basePath, "POST", module));
+                list.add(createPermission("UPDATE_" + module, basePath + "/{id}", "PUT", module));
+                list.add(createPermission("DELETE_" + module, basePath + "/{id}", "DELETE", module));
+                list.add(createPermission("VIEW_ALL_" + module, basePath, "GET", module));
+                list.add(createPermission("VIEW_" + module, basePath + "/{id}", "GET", module));
+                // Add paged variation if relevant (for Roles/Permissions)
+                if (module.equals("ROLE") || module.equals("PERMISSION")) {
+                        list.add(createPermission("VIEW_PAGED_" + module, basePath + "/paged", "GET", module));
+                }
         }
 
-        System.out.println("✅ Seeded: Roles, Locations, Brands, Vehicles, Admin, Customer & Bookings");
-        System.out.println("👤 Admin login: admin / admin123");
-        System.out.println("👤 Customer login: customer1 / customer123");
-    }
+        private Permission createPermission(String name, String apiPath, String method, String module) {
+                return Permission.builder()
+                                .name(name)
+                                .apiPath(apiPath)
+                                .method(method)
+                                .module(module)
+                                .build();
+        }
+
+        private List<Role> seedRoles(List<Permission> allPermissions) {
+                // ADMIN — all permissions
+                Role admin = createRole("ADMIN", "Quản trị viên toàn hệ thống", allPermissions);
+
+                // MANAGER — crud except delete for most, view for setup
+                List<String> managerPermissionNames = allPermissions.stream()
+                                .map(Permission::getName)
+                                .filter(name -> !name.startsWith("DELETE_") && !name.contains("PERMISSION")
+                                                && !name.contains("ROLE"))
+                                .collect(Collectors.toList());
+                managerPermissionNames.add("VIEW_ALL_ROLE");
+                managerPermissionNames.add("VIEW_ALL_PERMISSION");
+                managerPermissionNames.add("VIEW_PAGED_ROLE");
+                managerPermissionNames.add("VIEW_PAGED_PERMISSION");
+                managerPermissionNames.add("ADMIN_VIEW_ALL_USER"); // Cập nhật tên quyền Admin của User
+                Role manager = createRole("MANAGER", "Quản lý kinh doanh",
+                                filterPermissions(allPermissions, managerPermissionNames));
+
+                // STAFF — view all, update vehicles/bookings, booking management
+                List<String> staffPermissionNames = allPermissions.stream()
+                                .map(Permission::getName)
+                                .filter(name -> name.startsWith("VIEW_") || name.contains("VEHICLE")
+                                                || name.contains("MODEL") || name.contains("BOOKING")
+                                                || name.contains("REPORT"))
+                                .filter(name -> !name.startsWith("DELETE_"))
+                                .collect(Collectors.toList());
+                Role staff = createRole("STAFF", "Nhân viên vận hành",
+                                filterPermissions(allPermissions, staffPermissionNames));
+
+                // CUSTOMER — booking, customer self-service, public view
+                List<String> customerPermissionNames = allPermissions.stream()
+                                .map(Permission::getName)
+                                .filter(name -> name.contains("PUBLIC")
+                                                || name.contains("BOOKING")
+                                                || name.equals("VIEW_CUSTOMER")
+                                                || name.equals("UPDATE_CUSTOMER_SELF")
+                                                || name.equals("VERIFY_CUSTOMER"))
+                                .collect(Collectors.toList());
+                Role customer = createRole("CUSTOMER", "Khách hàng",
+                                filterPermissions(allPermissions, customerPermissionNames));
+
+                List<Role> saved = roleRepository.saveAll(List.of(admin, manager, staff, customer));
+                roleRepository.flush();
+                log.info("Seeded {} roles: ADMIN, MANAGER, STAFF, CUSTOMER", saved.size());
+                return saved;
+        }
+
+        private Role createRole(String name, String description, List<Permission> permissions) {
+                return Role.builder()
+                                .name(name)
+                                .description(description)
+                                .permissions(permissions)
+                                .build();
+        }
+
+        private List<Permission> filterPermissions(List<Permission> all, List<String> names) {
+                return all.stream()
+                                .filter(p -> names.contains(p.getName()))
+                                .collect(Collectors.toList());
+        }
+
+        private void seedUsers(List<Role> allRoles) {
+                String encodedPassword = passwordEncoder.encode(DEFAULT_PASSWORD);
+
+                Role adminRole = allRoles.stream().filter(r -> r.getName().equals("ADMIN")).findFirst().get();
+                Role managerRole = allRoles.stream().filter(r -> r.getName().equals("MANAGER")).findFirst().get();
+                Role staffRole = allRoles.stream().filter(r -> r.getName().equals("STAFF")).findFirst().get();
+                Role customerRole = allRoles.stream().filter(r -> r.getName().equals("CUSTOMER")).findFirst().get();
+
+                userRepository.saveAll(List.of(
+                                createUser("admin", "admin@xenow.vn", encodedPassword, "Hệ Thống - Admin", adminRole),
+                                createUser("manager", "manager@xenow.vn", encodedPassword, "Hệ Thống - Manager",
+                                                managerRole),
+                                createUser("staff", "staff@xenow.vn", encodedPassword, "Hệ Thống - Staff", staffRole),
+                                createUser("customer1", "khach1@xenow.vn", encodedPassword, "Nguyễn Văn Khách",
+                                                customerRole)));
+                userRepository.flush(); // Ensure IDs are generated for reference in business data
+        }
+
+        private User createUser(String username, String email, String password, String fullName, Role role) {
+                return User.builder()
+                                .username(username)
+                                .email(email)
+                                .password(password)
+                                .fullName(fullName)
+                                .roles(java.util.Set.of(role))
+                                .status(User.Status.Active)
+                                .build();
+        }
+
+        private void seedBusinessData() {
+                // Locations
+                Location hcm = locationRepository.save(Location.builder()
+                                .branchName("Chi nhánh TP. Hồ Chí Minh")
+                                .address("123 Nguyễn Huệ").city("TP. Hồ Chí Minh").phone("0281234567").build());
+                Location hn = locationRepository.save(Location.builder()
+                                .branchName("Chi nhánh Hà Nội")
+                                .address("45 Hoàn Kiếm").city("Hà Nội").phone("0241234567").build());
+
+                // Brands
+                Brand toyota = brandRepository.save(Brand.builder().brandName("Toyota").build());
+                Brand honda = brandRepository.save(Brand.builder().brandName("Honda").build());
+
+                // Models
+                Model vios = modelRepository.save(Model.builder().modelName("Vios").brand(toyota).build());
+                Model crv = modelRepository.save(Model.builder().modelName("CR-V").brand(honda).build());
+
+                // Vehicles
+                vehicleRepository.save(Vehicle.builder()
+                                .type("Xe Ô Tô")
+                                .currentLocation(hcm)
+                                .licensePlate("51A-12345")
+                                .model(vios)
+                                .manufactureYear(2022)
+                                .mileage(15000)
+                                .pricePerDay(new BigDecimal("600000"))
+                                .status(Vehicle.Status.Available)
+                                .fuelType("Xăng")
+                                .transmission("Tự động")
+                                .seats(4)
+                                .build());
+
+                vehicleRepository.save(Vehicle.builder()
+                                .type("Xe Ô Tô")
+                                .currentLocation(hn)
+                                .licensePlate("29H-11111")
+                                .model(crv)
+                                .manufactureYear(2023)
+                                .mileage(5000)
+                                .pricePerDay(new BigDecimal("1200000"))
+                                .status(Vehicle.Status.Available)
+                                .fuelType("Xăng")
+                                .transmission("Tự động")
+                                .seats(7)
+                                .build());
+
+                // Link customer entity to customer1 user
+                userRepository.findByUsername("customer1").ifPresent(user -> {
+                        customerRepository.save(Customer.builder()
+                                        .user(user)
+                                        .identityCard("001099123456")
+                                        .address("456 Lê Lợi, TP.HCM")
+                                        .build());
+                });
+        }
 }

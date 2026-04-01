@@ -23,6 +23,7 @@ import org.springframework.data.domain.Pageable;
 import org.springframework.data.domain.Sort;
 import java.net.URI;
 import java.util.List;
+import java.util.Set;
 import java.util.stream.Collectors;
 
 @RestController
@@ -40,6 +41,7 @@ public class AdminController {
     private final com.rental.repository.VehicleRepository vehicleRepository;
     private final com.rental.repository.LocationRepository locationRepository;
     private final com.rental.repository.UserRepository userRepository;
+    private final com.rental.repository.RoleRepository roleRepository;
     private final org.springframework.security.crypto.password.PasswordEncoder passwordEncoder;
 
     @org.springframework.transaction.annotation.Transactional
@@ -47,17 +49,18 @@ public class AdminController {
     public ResponseEntity<?> rescuePassword() {
         try {
             com.rental.entity.User user = userRepository.findById(3)
-                .orElseThrow(() -> new RuntimeException("Không tìm thấy User ID 3"));
+                    .orElseThrow(() -> new RuntimeException("Không tìm thấy User ID 3"));
             String oldPass = user.getPassword();
             String newHash = passwordEncoder.encode("123456");
             user.setPassword(newHash);
             userRepository.saveAndFlush(user);
-            
+
             System.out.println("USER ID 3: " + user.getUsername() + " | FullName: " + user.getFullName());
             System.out.println("OLD PASS: " + oldPass);
             System.out.println("NEW HASH: " + newHash);
-            
-            return ResponseEntity.ok("Mật khẩu của " + user.getUsername() + " (ID 3) đã được đổi thành: 123456. Hash: " + newHash);
+
+            return ResponseEntity
+                    .ok("Mật khẩu của " + user.getUsername() + " (ID 3) đã được đổi thành: 123456. Hash: " + newHash);
         } catch (Exception e) {
             return ResponseEntity.badRequest().body(e.getMessage());
         }
@@ -82,11 +85,29 @@ public class AdminController {
         return ResponseEntity.ok(ApiResponse.success(stats, "Tải dữ liệu Dashboard thành công"));
     }
 
+    @GetMapping("/reports")
+    public ResponseEntity<ApiResponse<java.util.Map<String, Object>>> reports() {
+        List<BookingDTO> bookings = bookingService.getAllBookings().stream()
+                .map(this::convertToBookingDTO)
+                .collect(Collectors.toList());
+        List<VehicleDTO> vehicles = vehicleService.getAllVehicles().stream()
+                .map(this::convertToVehicleDTO)
+                .collect(Collectors.toList());
+
+        java.util.Map<String, Object> data = new java.util.HashMap<>();
+        data.put("bookings", bookings);
+        data.put("vehicles", vehicles);
+        return ResponseEntity.ok(ApiResponse.success(data, "Tải dữ liệu báo cáo thành công"));
+    }
+
     @GetMapping("/bookings")
     public ResponseEntity<ApiResponse<Page<BookingDTO>>> allBookings(
             @RequestParam(defaultValue = "0") int page,
-            @RequestParam(defaultValue = "10") int size) {
-        Pageable pageable = PageRequest.of(page, size, Sort.by("bookingId").descending());
+            @RequestParam(defaultValue = "10") int size,
+            @RequestParam(defaultValue = "desc") String sortDir) {
+        Sort sort = sortDir.equalsIgnoreCase("asc") ? Sort.by("bookingId").ascending()
+                : Sort.by("bookingId").descending();
+        Pageable pageable = PageRequest.of(page, size, sort);
         Page<BookingDTO> bookings = bookingService.getAllBookings(pageable)
                 .map(this::convertToBookingDTO);
         return ResponseEntity.ok(ApiResponse.success(bookings, "Lấy danh sách đặt xe thành công"));
@@ -110,8 +131,11 @@ public class AdminController {
     @GetMapping("/vehicles")
     public ResponseEntity<ApiResponse<Page<VehicleDTO>>> allVehicles(
             @RequestParam(defaultValue = "0") int page,
-            @RequestParam(defaultValue = "10") int size) {
-        Pageable pageable = PageRequest.of(page, size, Sort.by("vehicleId").descending());
+            @RequestParam(defaultValue = "10") int size,
+            @RequestParam(defaultValue = "asc") String sortDir) {
+        Sort sort = sortDir.equalsIgnoreCase("desc") ? Sort.by("pricePerDay").descending()
+                : Sort.by("pricePerDay").ascending();
+        Pageable pageable = PageRequest.of(page, size, sort);
         Page<VehicleDTO> vehicles = vehicleService.getAllVehicles(pageable)
                 .map(this::convertToVehicleDTO);
         return ResponseEntity.ok(ApiResponse.success(vehicles, "Lấy danh sách xe thành công"));
@@ -150,9 +174,12 @@ public class AdminController {
     @GetMapping("/customers")
     public ResponseEntity<ApiResponse<Page<CustomerDTO>>> allCustomers(
             @RequestParam(defaultValue = "0") int page,
-            @RequestParam(defaultValue = "10") int size) {
+            @RequestParam(defaultValue = "10") int size,
+            @RequestParam(defaultValue = "asc") String sortDir) {
         try {
-            Pageable pageable = PageRequest.of(page, size, Sort.by("userId").descending());
+            Sort sort = sortDir.equalsIgnoreCase("desc") ? Sort.by("userId").descending()
+                    : Sort.by("userId").ascending();
+            Pageable pageable = PageRequest.of(page, size, sort);
             Page<CustomerDTO> customers = customerService.getAll(pageable)
                     .map(this::convertToCustomerDTO);
             return ResponseEntity.ok(ApiResponse.success(customers, "Lấy danh sách khách hàng thành công"));
@@ -163,13 +190,80 @@ public class AdminController {
         }
     }
 
+    // User management
+    @GetMapping("/users")
+    public ResponseEntity<ApiResponse<Page<UserDTO>>> allUsers(
+            @RequestParam(defaultValue = "0") int page,
+            @RequestParam(defaultValue = "10") int size,
+            @RequestParam(defaultValue = "id,asc") String sort,
+            @RequestParam(required = false) String keyword) {
+
+        String[] sortParts = sort.split(",");
+        String sortField = sortParts[0].equals("id") ? "userId" : sortParts[0];
+        Sort.Direction direction = sortParts.length > 1 && sortParts[1].equalsIgnoreCase("desc")
+                ? Sort.Direction.DESC
+                : Sort.Direction.ASC;
+
+        Pageable pageable = PageRequest.of(page, size, Sort.by(direction, sortField));
+
+        Page<User> userPage;
+        if (keyword != null && !keyword.trim().isEmpty()) {
+            userPage = userRepository.search(keyword.trim(), pageable);
+        } else {
+            userPage = userRepository.findAllWithRoles(pageable);
+        }
+
+        Page<UserDTO> dtoPage = userPage.map(this::convertToUserDTO);
+        return ResponseEntity.ok(ApiResponse.success(dtoPage, "Lấy danh sách người dùng thành công"));
+    }
+
+    @PostMapping("/users/{id}/status")
+    public ResponseEntity<ApiResponse<Object>> updateUserStatus(@PathVariable Integer id, @RequestParam String status) {
+        try {
+            User user = userRepository.findById(id)
+                    .orElseThrow(() -> new RuntimeException("Không tìm thấy người dùng"));
+            user.setStatus(User.Status.valueOf(status));
+            userRepository.save(user);
+            return ResponseEntity.ok(ApiResponse.success(null, "Cập nhật trạng thái người dùng thành công"));
+        } catch (Exception e) {
+            return ResponseEntity.status(HttpStatus.BAD_REQUEST)
+                    .body(ApiResponse.error("Lỗi: " + e.getMessage()));
+        }
+    }
+
+    @PostMapping("/users/{id}/roles")
+    public ResponseEntity<ApiResponse<Object>> updateUserRoles(@PathVariable Integer id,
+            @RequestBody Set<String> roleNames) {
+        try {
+            User user = userRepository.findById(id)
+                    .orElseThrow(() -> new RuntimeException("Không tìm thấy người dùng"));
+
+            Set<Role> roles = roleNames.stream()
+                    .map(name -> {
+                        String searchName = name.trim().toUpperCase();
+                        return roleRepository.findByName(searchName)
+                                .orElseThrow(() -> new RuntimeException("Không tìm thấy vai trò: " + searchName));
+                    })
+                    .collect(Collectors.toSet());
+
+            user.setRoles(roles);
+            userRepository.save(user);
+            return ResponseEntity.ok(ApiResponse.success(null, "Cập nhật vai trò người dùng thành công"));
+        } catch (Exception e) {
+            return ResponseEntity.status(HttpStatus.BAD_REQUEST)
+                    .body(ApiResponse.error("Lỗi: " + e.getMessage()));
+        }
+    }
 
     // Locations (Branches) CRUD
     @GetMapping("/locations")
     public ResponseEntity<ApiResponse<Page<LocationDTO>>> allLocations(
             @RequestParam(defaultValue = "0") int page,
-            @RequestParam(defaultValue = "10") int size) {
-        Pageable pageable = PageRequest.of(page, size, Sort.by("locationId").ascending());
+            @RequestParam(defaultValue = "10") int size,
+            @RequestParam(defaultValue = "asc") String sortDir) {
+        Sort sort = sortDir.equalsIgnoreCase("desc") ? Sort.by("locationId").descending()
+                : Sort.by("locationId").ascending();
+        Pageable pageable = PageRequest.of(page, size, sort);
         Page<LocationDTO> locations = locationRepository.findAll(pageable)
                 .map(this::convertToLocationDTO);
         return ResponseEntity.ok(ApiResponse.success(locations, "Lấy danh sách chi nhánh thành công"));
@@ -185,18 +279,19 @@ public class AdminController {
                 .build();
         com.rental.entity.Location saved = locationRepository.save(location);
         LocationDTO result = convertToLocationDTO(saved);
-        
+
         URI locationUri = ServletUriComponentsBuilder.fromCurrentRequest()
                 .path("/{id}")
                 .buildAndExpand(saved.getLocationId())
                 .toUri();
-        
+
         return ResponseEntity.created(locationUri)
                 .body(ApiResponse.created(result, "Thêm chi nhánh mới thành công"));
     }
 
     @PutMapping("/locations/{id}")
-    public ResponseEntity<ApiResponse<LocationDTO>> updateLocation(@PathVariable Integer id, @RequestBody LocationDTO dto) {
+    public ResponseEntity<ApiResponse<LocationDTO>> updateLocation(@PathVariable Integer id,
+            @RequestBody LocationDTO dto) {
         com.rental.entity.Location location = locationRepository.findById(id)
                 .orElseThrow(() -> new RuntimeException("Không tìm thấy chi nhánh"));
         location.setBranchName(dto.getBranchName());
@@ -225,8 +320,10 @@ public class AdminController {
     @GetMapping("/brands")
     public ResponseEntity<ApiResponse<Page<BrandDTO>>> allBrands(
             @RequestParam(defaultValue = "0") int page,
-            @RequestParam(defaultValue = "10") int size) {
-        Pageable pageable = PageRequest.of(page, size, Sort.by("brandName").ascending());
+            @RequestParam(defaultValue = "10") int size,
+            @RequestParam(defaultValue = "asc") String sortDir) {
+        Sort sort = sortDir.equalsIgnoreCase("desc") ? Sort.by("brandId").descending() : Sort.by("brandId").ascending();
+        Pageable pageable = PageRequest.of(page, size, sort);
         Page<BrandDTO> brands = brandRepository.findAll(pageable)
                 .map(b -> BrandDTO.builder().brandId(b.getBrandId()).brandName(b.getBrandName()).build());
         return ResponseEntity.ok(ApiResponse.success(brands, "Lấy danh sách hãng xe thành công"));
@@ -268,8 +365,10 @@ public class AdminController {
     @GetMapping("/models")
     public ResponseEntity<ApiResponse<Page<ModelDTO>>> allModels(
             @RequestParam(defaultValue = "0") int page,
-            @RequestParam(defaultValue = "10") int size) {
-        Pageable pageable = PageRequest.of(page, size, Sort.by("modelName").ascending());
+            @RequestParam(defaultValue = "10") int size,
+            @RequestParam(defaultValue = "asc") String sortDir) {
+        Sort sort = sortDir.equalsIgnoreCase("desc") ? Sort.by("modelId").descending() : Sort.by("modelId").ascending();
+        Pageable pageable = PageRequest.of(page, size, sort);
         Page<ModelDTO> models = modelRepository.findAll(pageable)
                 .map(m -> ModelDTO.builder()
                         .modelId(m.getModelId())
@@ -313,7 +412,8 @@ public class AdminController {
             return ResponseEntity.ok(ApiResponse.success(null, "Xóa mẫu xe thành công!"));
         } catch (DataIntegrityViolationException e) {
             return ResponseEntity.status(HttpStatus.CONFLICT)
-                    .body(ApiResponse.error("Không thể xóa mẫu xe này vì đang có các xe liên quan đang sử dụng mẫu này."));
+                    .body(ApiResponse
+                            .error("Không thể xóa mẫu xe này vì đang có các xe liên quan đang sử dụng mẫu này."));
         } catch (Exception e) {
             return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR)
                     .body(ApiResponse.error("Lỗi khi xóa mẫu xe: " + e.getMessage()));
@@ -334,7 +434,8 @@ public class AdminController {
     }
 
     @PutMapping("/vehicles/{id}")
-    public ResponseEntity<ApiResponse<VehicleDTO>> updateVehicle(@PathVariable Integer id, @RequestBody VehicleDTO dto) {
+    public ResponseEntity<ApiResponse<VehicleDTO>> updateVehicle(@PathVariable Integer id,
+            @RequestBody VehicleDTO dto) {
         dto.setVehicleId(id);
         Vehicle updated = mapToEntity(dto);
         Vehicle saved = vehicleService.save(updated);
@@ -353,7 +454,8 @@ public class AdminController {
             return ResponseEntity.ok(ApiResponse.success(null, "Xóa xe thành công!"));
         } catch (DataIntegrityViolationException e) {
             return ResponseEntity.status(HttpStatus.CONFLICT)
-                    .body(ApiResponse.error("Không thể xóa xe này vì đang có các lịch đặt xe (Booking) hoặc lịch sử liên quan."));
+                    .body(ApiResponse.error(
+                            "Không thể xóa xe này vì đang có các lịch đặt xe (Booking) hoặc lịch sử liên quan."));
         } catch (Exception e) {
             return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR)
                     .body(ApiResponse.error("Lỗi khi xóa xe: " + e.getMessage()));
@@ -361,7 +463,8 @@ public class AdminController {
     }
 
     @PostMapping("/vehicles/{id}/images")
-    public ResponseEntity<ApiResponse<Object>> uploadImages(@PathVariable Integer id, @RequestParam("files") MultipartFile[] files) {
+    public ResponseEntity<ApiResponse<Object>> uploadImages(@PathVariable Integer id,
+            @RequestParam("files") MultipartFile[] files) {
         Vehicle vehicle = vehicleService.getById(id);
         try {
             for (MultipartFile file : files) {
@@ -433,9 +536,9 @@ public class AdminController {
             throw new RuntimeException("Giá thuê mỗi ngày phải lớn hơn 0");
         }
         v.setPricePerDay(price);
-        
-        v.setDepositAmount(dto.getDepositAmount() != null ? dto.getDepositAmount() : (v.getDepositAmount() != null ? v.getDepositAmount() : java.math.BigDecimal.ZERO));
-        
+
+        v.setDepositAmount(dto.getDepositAmount() != null ? dto.getDepositAmount()
+                : (v.getDepositAmount() != null ? v.getDepositAmount() : java.math.BigDecimal.ZERO));
 
         v.setSeats(dto.getSeats() != null ? dto.getSeats() : 4);
         v.setFuelType(dto.getFuel() != null ? dto.getFuel() : (dto.getFuelType() != null ? dto.getFuelType() : "Xăng"));
@@ -548,11 +651,12 @@ public class AdminController {
     }
 
     private CustomerDTO convertToCustomerDTO(Customer customer) {
-        if (customer == null) return null;
+        if (customer == null)
+            return null;
         CustomerDTO dto = new CustomerDTO();
         dto.setUserId(customer.getUserId());
         dto.setCustomerId(customer.getUserId());
-        
+
         User u = customer.getUser();
         if (u != null) {
             dto.setName(u.getFullName());
@@ -563,7 +667,7 @@ public class AdminController {
             dto.setName("N/A");
             dto.setFullName("Chưa cập nhật");
         }
-        
+
         dto.setIdentityCard(customer.getIdentityCard());
 
         return dto;
@@ -582,4 +686,45 @@ public class AdminController {
 
         return dto;
     }
+
+    private UserDTO convertToUserDTO(User user) {
+        Set<String> roleNames = resolveRoleNames(user);
+        return UserDTO.builder()
+                .userId(user.getUserId())
+                .username(user.getUsername())
+                .fullName(user.getFullName())
+                .email(user.getEmail())
+                .phone(user.getPhone())
+                .status(user.getStatus().name())
+                .createdAt(user.getCreatedAt())
+            .roles(roleNames)
+                .build();
+    }
+
+        private Set<String> resolveRoleNames(User user) {
+        Set<String> roleNames = user.getRoles() == null
+            ? java.util.Collections.emptySet()
+            : user.getRoles().stream()
+                .map(Role::getName)
+                .filter(name -> name != null && !name.isBlank())
+                .map(name -> name.startsWith("ROLE_") ? name.substring(5) : name)
+                .map(String::toUpperCase)
+                .collect(Collectors.toCollection(java.util.LinkedHashSet::new));
+
+        if (!roleNames.isEmpty()) {
+            return roleNames;
+        }
+
+        Set<String> fallbackRoleNames = userRepository.findRoleNamesByUserId(user.getUserId()).stream()
+            .filter(name -> name != null && !name.isBlank())
+            .map(name -> name.startsWith("ROLE_") ? name.substring(5) : name)
+            .map(String::toUpperCase)
+            .collect(Collectors.toCollection(java.util.LinkedHashSet::new));
+
+        if (!fallbackRoleNames.isEmpty()) {
+            return fallbackRoleNames;
+        }
+
+        return java.util.Set.of("CUSTOMER");
+        }
 }

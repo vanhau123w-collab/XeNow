@@ -2,6 +2,7 @@ package com.rental.controller;
 
 import com.rental.dto.ApiResponse;
 import com.rental.dto.LoginRequest;
+import com.rental.entity.Permission;
 import com.rental.entity.RefreshToken;
 import com.rental.entity.Role;
 import com.rental.entity.User;
@@ -14,23 +15,25 @@ import com.rental.util.JwtUtil;
 import jakarta.servlet.http.HttpServletRequest;
 import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
+import lombok.extern.slf4j.Slf4j;
 import org.springframework.http.HttpHeaders;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseCookie;
 import org.springframework.http.ResponseEntity;
 import org.springframework.security.core.Authentication;
 import org.springframework.security.crypto.password.PasswordEncoder;
+import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.web.bind.annotation.*;
 
 import java.time.Instant;
 import java.time.temporal.ChronoUnit;
-import java.util.HashMap;
-import java.util.List;
-import java.util.Map;
+import java.util.*;
+import java.util.stream.Collectors;
 
 @RestController
 @RequestMapping("/api/auth")
 @RequiredArgsConstructor
+@Slf4j
 @CrossOrigin(origins = "http://localhost:5173")
 public class AuthController {
 
@@ -39,6 +42,7 @@ public class AuthController {
     private final RefreshTokenRepository refreshTokenRepository;
     private final PasswordEncoder passwordEncoder;
     private final JwtUtil jwtUtil;
+    private final JdbcTemplate jdbcTemplate;
 
     @PostMapping("/register")
     public ResponseEntity<ApiResponse<Map<String, Object>>> register(@Valid @RequestBody User user, HttpServletRequest request) {
@@ -49,17 +53,22 @@ public class AuthController {
             throw new DuplicateResourceException("Username đã được sử dụng");
         }
 
-        Role customerRole = roleRepository.findByRoleName("CUSTOMER")
-                .orElseThrow(() -> new ResourceNotFoundException("Role CUSTOMER không tồn tại"));
+        Role customerRole = roleRepository.findByName("CUSTOMER")
+            .orElseGet(() -> roleRepository.save(Role.builder()
+                .name("CUSTOMER")
+                .description("Khách hàng")
+                .build()));
 
+        Set<Role> rolesSet = new HashSet<>();
+        rolesSet.add(customerRole);
         user.setPassword(passwordEncoder.encode(user.getPassword()));
-        user.setRole(customerRole);
+        user.setRoles(rolesSet);
         user.setStatus(User.Status.Active);
 
         User savedUser = userRepository.save(user);
 
-        String roleStr = "CUSTOMER";
-        String accessToken = jwtUtil.generateAccessToken(savedUser.getUsername(), roleStr, savedUser.getUserId());
+        List<String> roleNames = List.of("CUSTOMER");
+        String accessToken = jwtUtil.generateAccessToken(savedUser.getUsername(), roleNames, savedUser.getUserId());
         String refreshTokenStr = jwtUtil.generateRefreshToken(savedUser.getUsername());
 
         RefreshToken refreshToken = RefreshToken.builder()
@@ -75,7 +84,7 @@ public class AuthController {
         data.put("authenticated", true);
         data.put("token", accessToken);
         data.put("refreshToken", refreshTokenStr);
-        data.put("user", buildUserMap(savedUser, roleStr));
+        data.put("user", buildUserMap(savedUser, roleNames));
 
         ResponseCookie cookie = buildRefreshTokenCookie(refreshTokenStr);
 
@@ -100,14 +109,10 @@ public class AuthController {
                     .body(ApiResponse.error("Tài khoản không có quyền truy cập"));
         }
 
-        String rawRole = (user.getRole() != null)
-                ? user.getRole().getRoleName()
-                : "CUSTOMER";
-        
-        // Strip ROLE_ prefix if present to avoid double prefixing with JwtAuthenticationConverter
-        String roleStr = rawRole.startsWith("ROLE_") ? rawRole.substring(5) : rawRole;
-        
-        String accessToken = jwtUtil.generateAccessToken(user.getUsername(), roleStr, user.getUserId());
+        List<String> roleNames = extractRoleNames(user);
+        log.info("[LOGIN] User '{}' logging in with roles: {}", user.getUsername(), roleNames);
+
+        String accessToken = jwtUtil.generateAccessToken(user.getUsername(), roleNames, user.getUserId());
         String refreshTokenStr = jwtUtil.generateRefreshToken(user.getUsername());
 
         refreshTokenRepository.deleteByUser(user);
@@ -124,7 +129,7 @@ public class AuthController {
         data.put("authenticated", true);
         data.put("token", accessToken);
         data.put("refreshToken", refreshTokenStr);
-        data.put("user", buildUserMap(user, roleStr));
+        data.put("user", buildUserMap(user, roleNames));
 
         ResponseCookie cookie = buildRefreshTokenCookie(refreshTokenStr);
 
@@ -157,11 +162,9 @@ public class AuthController {
                     }
 
                     User user = tokenEntity.getUser();
-                    String roleStr = (user.getRole() != null)
-                            ? user.getRole().getRoleName()
-                            : "CUSTOMER";
+                    List<String> roleNames = extractRoleNames(user);
 
-                    String newAccessToken = jwtUtil.generateAccessToken(user.getUsername(), roleStr, user.getUserId());
+                    String newAccessToken = jwtUtil.generateAccessToken(user.getUsername(), roleNames, user.getUserId());
                     String newRefreshTokenStr = jwtUtil.generateRefreshToken(user.getUsername());
 
                     tokenEntity.setRevoked(true);
@@ -236,21 +239,67 @@ public class AuthController {
                     .body(ApiResponse.error("Không tìm thấy người dùng"));
         }
 
-        String roleStr = (user.getRole() != null) ? user.getRole().getRoleName()
-                : "CUSTOMER";
+        List<String> roleNames = extractRoleNames(user);
         Map<String, Object> data = new HashMap<>();
-        data.put("user", buildUserMap(user, roleStr));
+        data.put("user", buildUserMap(user, roleNames));
         data.put("authenticated", true);
 
         return ResponseEntity.ok(ApiResponse.success(data, "Lấy thông tin người dùng thành công"));
     }
 
-    private Map<String, Object> buildUserMap(User user, String role) {
+    // ==================== HELPER METHODS ====================
+
+    /**
+     * Extract role names from user, stripping ROLE_ prefix if present.
+     */
+    private List<String> extractRoleNames(User user) {
+                List<String> roleNames = user.getRoles().stream()
+                .map(Role::getName)
+                .map(name -> name.startsWith("ROLE_") ? name.substring(5) : name)
+                .collect(Collectors.toList());
+
+                if (roleNames.isEmpty()) {
+                        List<String> fallbackRoleNames = loadRoleNamesFromJoinTable(user.getUserId());
+                        if (!fallbackRoleNames.isEmpty()) {
+                                log.warn("[LOGIN] JPA roles empty for user '{}' (id={}), fallback SQL roles={}",
+                                                user.getUsername(), user.getUserId(), fallbackRoleNames);
+                                roleNames = fallbackRoleNames;
+                        }
+                }
+
+                return roleNames;
+    }
+
+        private List<String> loadRoleNamesFromJoinTable(Integer userId) {
+                try {
+                        String currentDb = jdbcTemplate.queryForObject("SELECT DATABASE()", String.class);
+                        List<String> roleNames = jdbcTemplate.queryForList(
+                                        "SELECT r.name FROM user_role ur JOIN roles r ON r.id = ur.role_id WHERE ur.user_id = ?",
+                                        String.class,
+                                        userId
+                        ).stream()
+                                        .map(name -> name.startsWith("ROLE_") ? name.substring(5) : name)
+                                        .collect(Collectors.toList());
+
+                        log.info("[LOGIN] Direct role lookup in DB '{}' for userId={} => {}",
+                                        currentDb, userId, roleNames);
+                        return roleNames;
+                } catch (Exception e) {
+                        log.warn("[LOGIN] Direct role lookup failed for userId={}: {}", userId, e.getMessage());
+                        return List.of();
+                }
+        }
+
+    /**
+     * Build user response map. Returns primary role for backward compatibility,
+     * plus full roles list and dynamic hasAdminAccess flag.
+     */
+    private Map<String, Object> buildUserMap(User user, List<String> roles) {
         Map<String, Object> userMap = new HashMap<>();
         userMap.put("userId", user.getUserId());
         userMap.put("username", user.getUsername());
         userMap.put("fullName", user.getFullName());
-        userMap.put("name", user.getFullName()); // Added for frontend compatibility
+        userMap.put("name", user.getFullName());
         userMap.put("email", user.getEmail());
         userMap.put("phone", user.getPhone());
         userMap.put("address", user.getAddress());
@@ -258,8 +307,43 @@ public class AuthController {
         userMap.put("avatar", user.getAvatar());
         userMap.put("dateOfBirth", user.getDateOfBirth());
         userMap.put("status", user.getStatus().toString());
-        userMap.put("role", role);
+        userMap.put("role", roles.isEmpty() ? "CUSTOMER" : roles.get(0)); // backward compat
+        userMap.put("roles", roles); // full list
+        userMap.put("hasAdminAccess", checkAdminAccess(roles));
         return userMap;
+    }
+
+    /**
+     * Dynamically check if user's roles grant access to admin panel.
+     * ADMIN role → always true (bypass).
+     * Other roles → check if any permission matches /api/admin/** pattern.
+     */
+    private boolean checkAdminAccess(List<String> roles) {
+        org.springframework.util.AntPathMatcher pathMatcher = new org.springframework.util.AntPathMatcher();
+        for (String role : roles) {
+            String upperRole = role.toUpperCase();
+            // ADMIN always has full access
+            if ("ADMIN".equals(upperRole)) {
+                return true;
+            }
+            // Check dynamic permissions from the PermissionAuthorizationManager cache
+            String cacheKey = "ROLE_" + upperRole;
+            try {
+                List<Role> allRoles = roleRepository.findAllWithPermissions();
+                for (Role r : allRoles) {
+                    if (("ROLE_" + r.getName()).equals(cacheKey) || r.getName().equals(upperRole)) {
+                        for (Permission perm : r.getPermissions()) {
+                            if (pathMatcher.match("/api/admin/**", perm.getApiPath())) {
+                                return true;
+                            }
+                        }
+                    }
+                }
+            } catch (Exception e) {
+                log.warn("[AUTH] Failed to check admin access for role {}: {}", role, e.getMessage());
+            }
+        }
+        return false;
     }
 
     private String getClientIp(HttpServletRequest request) {

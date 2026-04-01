@@ -8,6 +8,7 @@ import org.springframework.stereotype.Component;
 
 import java.time.Instant;
 import java.time.temporal.ChronoUnit;
+import java.util.List;
 import java.util.Objects;
 
 @Component
@@ -23,14 +24,17 @@ public class JwtUtil {
     @Value("${jwt.refresh-expiration:604800000}") // 7 ngày
     private Long refreshTokenExpiration;
 
-    public String generateAccessToken(String username, String role, Integer userId) {
+    /**
+     * Generate access token with multiple roles stored as a List claim.
+     */
+    public String generateAccessToken(String username, List<String> roles, Integer userId) {
         Instant now = Instant.now();
         JwtClaimsSet claims = JwtClaimsSet.builder()
                 .issuer("xenow")
                 .issuedAt(now)
                 .expiresAt(now.plus(accessTokenExpiration, ChronoUnit.MILLIS))
                 .subject(username)
-                .claim("role", role)
+                .claim("role", roles) // List<String> → JWT array claim
                 .claim("userId", userId)
                 .build();
         
@@ -53,8 +57,16 @@ public class JwtUtil {
         return jwtDecoder.decode(token).getSubject();
     }
 
-    public String extractRole(String token) {
-        return jwtDecoder.decode(token).getClaimAsString("role");
+    @SuppressWarnings("unchecked")
+    public List<String> extractRoles(String token) {
+        Object roleClaim = jwtDecoder.decode(token).getClaim("role");
+        if (roleClaim instanceof List) {
+            return (List<String>) roleClaim;
+        }
+        if (roleClaim instanceof String) {
+            return List.of((String) roleClaim);
+        }
+        return List.of();
     }
 
     public Integer extractUserId(String token) {

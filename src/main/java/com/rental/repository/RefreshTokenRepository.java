@@ -7,6 +7,7 @@ import org.springframework.stereotype.Repository;
 import java.util.Optional;
 
 import org.springframework.transaction.annotation.Transactional;
+import java.time.Instant;
 
 @Repository
 public interface RefreshTokenRepository extends JpaRepository<RefreshToken, Long> {
@@ -14,4 +15,10 @@ public interface RefreshTokenRepository extends JpaRepository<RefreshToken, Long
     
     @Transactional
     void deleteByUser(User user);
+
+    @Transactional
+    int deleteByExpiresAtBefore(Instant cutoff);
+
+    @Transactional
+    int deleteByRevokedTrue();
 }

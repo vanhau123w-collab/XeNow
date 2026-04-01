@@ -58,7 +58,7 @@ public class GlobalExceptionHandler {
     // 4. DataIntegrityViolationException → 409 Conflict (e.g. Foreign Key Constraint)
     @ExceptionHandler(DataIntegrityViolationException.class)
     public ResponseEntity<ApiResponse<Void>> handleDataIntegrityViolation(DataIntegrityViolationException ex) {
-        String message = "Không thể thực hiện hành động này vì dữ liệu đang được liên kết hoặc vi phạm ràng buộc dữ liệu.";
+        String message = "Không thể xóa hoặc thay đổi vì dữ liệu này đang được sử dụng ở nơi khác.";
         log.error("Vi phạm ràng buộc dữ liệu: {}", ex.getMostSpecificCause().getMessage());
         return ResponseEntity.status(HttpStatus.CONFLICT)
                 .body(ApiResponse.conflict(message));

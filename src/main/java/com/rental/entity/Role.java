@@ -3,43 +3,54 @@ package com.rental.entity;
 import com.fasterxml.jackson.annotation.JsonIgnore;
 import jakarta.persistence.*;
 import lombok.*;
-import java.time.LocalDateTime;
+import java.time.Instant;
 import java.util.List;
 
 @Entity
-@Table(name = "Role")
+@Table(name = "roles", uniqueConstraints = {
+        @UniqueConstraint(columnNames = { "name" })
+})
 @Data
 @NoArgsConstructor
 @AllArgsConstructor
 @Builder
 public class Role {
-    
-    public enum RoleName {
-        ADMIN, STAFF, CUSTOMER
-    }
-
 
     @Id
     @GeneratedValue(strategy = GenerationType.IDENTITY)
-    @Column(name = "RoleID")
-    private Integer roleId;
+    private Integer id;
 
-    @Column(name = "RoleName", nullable = false, unique = true, length = 50)
-    private String roleName;
+    @Column(nullable = false)
+    private String name;
 
-    @Column(name = "DeletedAt")
-    private LocalDateTime deletedAt;
+    private String description;
 
-    @OneToMany(mappedBy = "role", fetch = FetchType.LAZY)
+    @Column(name = "created_at", updatable = false)
+    private Instant createdAt;
+
+    @Column(name = "updated_at")
+    private Instant updatedAt;
+
+    @ManyToMany(mappedBy = "roles", fetch = FetchType.LAZY)
     @JsonIgnore
-    private List<User> users;
+    @ToString.Exclude
+    @EqualsAndHashCode.Exclude
+    private java.util.Set<User> users;
 
     @ManyToMany(fetch = FetchType.LAZY)
-    @JoinTable(
-        name = "permission_role",
-        joinColumns = @JoinColumn(name = "role_id"),
-        inverseJoinColumns = @JoinColumn(name = "permission_id")
-    )
+    @JoinTable(name = "permission_role", joinColumns = @JoinColumn(name = "role_id"), inverseJoinColumns = @JoinColumn(name = "permission_id"))
+    @ToString.Exclude
+    @EqualsAndHashCode.Exclude
     private List<Permission> permissions;
-}
 
+    @PrePersist
+    protected void onCreate() {
+        this.createdAt = Instant.now();
+        this.updatedAt = Instant.now();
+    }
+
+    @PreUpdate
+    protected void onUpdate() {
+        this.updatedAt = Instant.now();
+    }
+}

@@ -2,13 +2,13 @@ package com.rental.entity;
 
 import jakarta.persistence.*;
 import lombok.*;
-import org.hibernate.annotations.CreationTimestamp;
-import org.hibernate.annotations.UpdateTimestamp;
 import java.time.Instant;
 import java.util.List;
 
 @Entity
-@Table(name = "permissions")
+@Table(name = "permissions", uniqueConstraints = {
+        @UniqueConstraint(columnNames = { "api_path", "method" })
+})
 @Data
 @NoArgsConstructor
 @AllArgsConstructor
@@ -21,21 +21,32 @@ public class Permission {
     @Column(nullable = false)
     private String name;
 
-    @Column(name = "api_path")
+    @Column(name = "api_path", nullable = false)
     private String apiPath;
 
+    @Column(nullable = false)
     private String method;
     
     private String module;
 
-    @CreationTimestamp
     @Column(name = "created_at", updatable = false)
     private Instant createdAt;
 
-    @UpdateTimestamp
     @Column(name = "updated_at")
     private Instant updatedAt;
 
     @ManyToMany(mappedBy = "permissions", fetch = FetchType.LAZY)
+    @ToString.Exclude
     private List<Role> roles;
+
+    @PrePersist
+    protected void onCreate() {
+        this.createdAt = Instant.now();
+        this.updatedAt = Instant.now();
+    }
+
+    @PreUpdate
+    protected void onUpdate() {
+        this.updatedAt = Instant.now();
+    }
 }
