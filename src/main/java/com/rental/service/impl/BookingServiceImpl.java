@@ -1,11 +1,11 @@
 package com.rental.service.impl;
 
+import com.rental.bookingstate.BookingStateContext;
+import com.rental.bookingstate.BookingStateMachine;
 import com.rental.entity.Booking;
 import com.rental.entity.Vehicle;
 import com.rental.repository.BookingRepository;
 import com.rental.repository.VehicleRepository;
-import com.rental.repository.PaymentRepository;
-import com.rental.entity.Payment;
 import com.rental.service.BookingService;
 import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Service;
@@ -23,7 +23,7 @@ public class BookingServiceImpl implements BookingService {
 
     private final BookingRepository bookingRepository;
     private final VehicleRepository vehicleRepository;
-    private final PaymentRepository paymentRepository;
+    private final BookingStateMachine bookingStateMachine;
 
     @Override
     public List<Booking> getAllBookings() {
@@ -55,7 +55,6 @@ public class BookingServiceImpl implements BookingService {
         return bookingRepository.findByStatus(status, pageable);
     }
 
-
     @Override
     public Booking getById(Integer id) {
         return bookingRepository.findById(id)
@@ -79,18 +78,19 @@ public class BookingServiceImpl implements BookingService {
         // 2. Kiểm tra trùng lịch (Overlapping bookings)
         List<Booking.Status> activeStatuses = List.of(Booking.Status.Confirmed, Booking.Status.Ongoing);
         List<Booking> overlaps = bookingRepository.findOverlappingBookings(
-                vehicle.getVehicleId(), 
-                booking.getStartDate(), 
-                booking.getEndDate(), 
-                activeStatuses
-        );
+                vehicle.getVehicleId(),
+                booking.getStartDate(),
+                booking.getEndDate(),
+                activeStatuses);
 
         if (!overlaps.isEmpty()) {
-            throw new RuntimeException("Phương tiện đã được thuê hoặc có lịch đặt trong khoảng thời gian này. Vui lòng chọn thời gian khác hoặc xe khác.");
+            throw new RuntimeException(
+                    "Phương tiện đã được thuê hoặc có lịch đặt trong khoảng thời gian này. Vui lòng chọn thời gian khác hoặc xe khác.");
         }
 
         long days = ChronoUnit.DAYS.between(booking.getStartDate(), booking.getEndDate());
-        if (days <= 0) throw new IllegalArgumentException("Ngày trả phải sau ngày nhận xe");
+        if (days <= 0)
+            throw new IllegalArgumentException("Ngày trả phải sau ngày nhận xe");
 
         BigDecimal pricePerDay = vehicle.getPricePerDay();
         booking.setTotalPrice(pricePerDay.multiply(BigDecimal.valueOf(days)));
@@ -101,61 +101,13 @@ public class BookingServiceImpl implements BookingService {
 
     @Override
     @Transactional
-    public Booking updateStatus(Integer bookingId, Booking.Status newStatus, Integer mileage, String note, String returnPaymentMethod) {
+    public Booking updateStatus(Integer bookingId, Booking.Status newStatus, Integer mileage, String note,
+            String returnPaymentMethod) {
         Booking booking = getById(bookingId);
-        booking.setStatus(newStatus);
-
-        Vehicle vehicle = booking.getVehicle();
-        
-        if (newStatus == Booking.Status.Ongoing) {
-            vehicle.setStatus(Vehicle.Status.Rented);
-            vehicleRepository.save(vehicle);
-        } else if (newStatus == Booking.Status.Completed) {
-            vehicle.setStatus(Vehicle.Status.Available);
-            if (mileage != null && mileage > vehicle.getMileage()) {
-                vehicle.setMileage(mileage);
-            }
-            
-            // Tự động kiểm tra bảo trì (Ngưỡng 5000km)
-            if (vehicle.getMileage() - vehicle.getLastMaintenanceMileage() >= 5000) {
-                vehicle.setStatus(Vehicle.Status.Maintenance);
-            }
-            
-            vehicleRepository.save(vehicle);
-            
-            booking.setReturnMileage(mileage);
-            booking.setReturnNote(note);
-            
-            // Generate payment for remainder if returnPaymentMethod exists
-            if (returnPaymentMethod != null && !returnPaymentMethod.isEmpty()) {
-                // Calculate remainder
-                BigDecimal total = booking.getTotalPrice() != null ? booking.getTotalPrice() : BigDecimal.ZERO;
-                List<Payment> existingPayments = paymentRepository.findByBookingBookingId(bookingId);
-                BigDecimal paidAmount = existingPayments.stream()
-                        .filter(p -> p.getStatus() == Payment.Status.Completed || p.getStatus() == Payment.Status.Pending) // Assume pending will complete
-                        .map(Payment::getAmount)
-                        .reduce(BigDecimal.ZERO, BigDecimal::add);
-                
-                BigDecimal remainder = total.subtract(paidAmount);
-                if (remainder.compareTo(BigDecimal.ZERO) > 0) {
-                    Payment payment = new Payment();
-                    payment.setBooking(booking);
-                    payment.setAmount(remainder);
-                    if ("Chuyển khoản".equalsIgnoreCase(returnPaymentMethod)) {
-                        payment.setPaymentMethod(Payment.Method.BankTransfer);
-                    } else if ("Thẻ tín dụng".equalsIgnoreCase(returnPaymentMethod)) {
-                        payment.setPaymentMethod(Payment.Method.CreditCard);
-                    } else {
-                        payment.setPaymentMethod(Payment.Method.Cash);
-                    }
-                    payment.setStatus(Payment.Status.Completed);
-                    paymentRepository.save(payment);
-                }
-            }
-        } else if (newStatus == Booking.Status.Cancelled) {
-            vehicle.setStatus(Vehicle.Status.Available);
-            vehicleRepository.save(vehicle);
-        }
+        bookingStateMachine.transitionTo(
+                booking,
+                newStatus,
+                new BookingStateContext(mileage, note, returnPaymentMethod));
 
         return bookingRepository.save(booking);
     }

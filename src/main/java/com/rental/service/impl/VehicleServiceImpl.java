@@ -57,7 +57,6 @@ public class VehicleServiceImpl implements VehicleService {
         return vehicleRepository.findAvailableByType(type, pageable);
     }
 
-
     @Override
     public Vehicle getById(Integer id) {
         return vehicleRepository.findById(id)

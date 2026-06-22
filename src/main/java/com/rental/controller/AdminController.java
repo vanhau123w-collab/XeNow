@@ -25,7 +25,13 @@ import java.net.URI;
 import java.util.List;
 import java.util.Set;
 import java.util.stream.Collectors;
+import java.math.BigDecimal;
 
+/**
+ * Controller dành cho Quản trị viên (Admin).
+ * Chứa các API quản lý toàn bộ hệ thống: Thống kê, Duyệt đơn, Quản lý Xe, Người
+ * dùng, Chi nhánh và hãng xe.
+ */
 @RestController
 @RequestMapping("/api/admin")
 @RequiredArgsConstructor
@@ -44,6 +50,10 @@ public class AdminController {
     private final com.rental.repository.RoleRepository roleRepository;
     private final org.springframework.security.crypto.password.PasswordEncoder passwordEncoder;
 
+    /**
+     * API hỗ trợ khôi phục mật khẩu cho một User cụ thể (Dùng trong trường hợp khẩn
+     * cấp/demo).
+     */
     @org.springframework.transaction.annotation.Transactional
     @GetMapping("/rescue-password")
     public ResponseEntity<?> rescuePassword() {
@@ -55,17 +65,17 @@ public class AdminController {
             user.setPassword(newHash);
             userRepository.saveAndFlush(user);
 
-            System.out.println("USER ID 3: " + user.getUsername() + " | FullName: " + user.getFullName());
-            System.out.println("OLD PASS: " + oldPass);
-            System.out.println("NEW HASH: " + newHash);
-
             return ResponseEntity
-                    .ok("Mật khẩu của " + user.getUsername() + " (ID 3) đã được đổi thành: 123456. Hash: " + newHash);
+                    .ok("Mật khẩu của " + user.getUsername() + " (ID 3) đã được đổi thành: 123456.");
         } catch (Exception e) {
             return ResponseEntity.badRequest().body(e.getMessage());
         }
     }
 
+    /**
+     * Lấy dữ liệu tổng quan cho trang Dashboard (Thống kê số lượng xe, đơn hàng
+     * đang chờ...).
+     */
     @GetMapping("/dashboard")
     public ResponseEntity<ApiResponse<DashboardStatsDTO>> dashboard() {
         long totalVehicles = vehicleService.getAllVehicles().size();
@@ -85,6 +95,9 @@ public class AdminController {
         return ResponseEntity.ok(ApiResponse.success(stats, "Tải dữ liệu Dashboard thành công"));
     }
 
+    /**
+     * Xuất dữ liệu báo cáo tổng hợp dưới dạng danh sách Bookings và Vehicles.
+     */
     @GetMapping("/reports")
     public ResponseEntity<ApiResponse<java.util.Map<String, Object>>> reports() {
         List<BookingDTO> bookings = bookingService.getAllBookings().stream()
@@ -100,6 +113,9 @@ public class AdminController {
         return ResponseEntity.ok(ApiResponse.success(data, "Tải dữ liệu báo cáo thành công"));
     }
 
+    /**
+     * Lấy danh sách tất cả các đơn đặt xe (có phân trang).
+     */
     @GetMapping("/bookings")
     public ResponseEntity<ApiResponse<Page<BookingDTO>>> allBookings(
             @RequestParam(defaultValue = "0") int page,
@@ -113,6 +129,11 @@ public class AdminController {
         return ResponseEntity.ok(ApiResponse.success(bookings, "Lấy danh sách đặt xe thành công"));
     }
 
+    /**
+     * Cập nhật trạng thái của đơn đặt xe (Ví dụ: Từ Pending sang Confirmed hoặc
+     * Completed).
+     * Bao gồm cập nhật số km khi trả xe và ghi chú từ Admin.
+     */
     @PostMapping("/bookings/{id}/status")
     public ResponseEntity<ApiResponse<Object>> updateBookingStatus(@PathVariable Integer id,
             @RequestParam String status,
@@ -128,6 +149,9 @@ public class AdminController {
         }
     }
 
+    /**
+     * Lấy danh sách toàn bộ phương tiện (có phân trang).
+     */
     @GetMapping("/vehicles")
     public ResponseEntity<ApiResponse<Page<VehicleDTO>>> allVehicles(
             @RequestParam(defaultValue = "0") int page,
@@ -141,12 +165,18 @@ public class AdminController {
         return ResponseEntity.ok(ApiResponse.success(vehicles, "Lấy danh sách xe thành công"));
     }
 
+    /**
+     * Lấy thông tin chi tiết của một xe theo ID.
+     */
     @GetMapping("/vehicles/{id}")
     public ResponseEntity<ApiResponse<VehicleDTO>> getVehicleById(@PathVariable Integer id) {
         Vehicle vehicle = vehicleService.getById(id);
         return ResponseEntity.ok(ApiResponse.success(convertToVehicleDTO(vehicle), "Lấy thông tin xe thành công"));
     }
 
+    /**
+     * Thay đổi trạng thái của xe (Ví dụ: Chuyển sang Maintenance khi cần bảo trì).
+     */
     @PostMapping("/vehicles/{id}/status")
     public ResponseEntity<ApiResponse<Object>> updateVehicleStatus(@PathVariable Integer id,
             @RequestParam String status) {
@@ -159,6 +189,10 @@ public class AdminController {
         }
     }
 
+    /**
+     * Xác nhận hoàn tất bảo trì xe để đưa xe trở lại trạng thái Sẵn sàng
+     * (Available).
+     */
     @PostMapping("/vehicles/{id}/maintenance/complete")
     public ResponseEntity<ApiResponse<Object>> completeMaintenance(@PathVariable Integer id) {
         try {
@@ -170,6 +204,9 @@ public class AdminController {
         }
     }
 
+    /**
+     * Quản lý danh sách Khách hàng.
+     */
     @org.springframework.transaction.annotation.Transactional(readOnly = true)
     @GetMapping("/customers")
     public ResponseEntity<ApiResponse<Page<CustomerDTO>>> allCustomers(
@@ -190,7 +227,10 @@ public class AdminController {
         }
     }
 
-    // User management
+    /**
+     * Quản lý toàn bộ người dùng trong hệ thống (nhân viên, khách hàng, quản trị
+     * viên).
+     */
     @GetMapping("/users")
     public ResponseEntity<ApiResponse<Page<UserDTO>>> allUsers(
             @RequestParam(defaultValue = "0") int page,
@@ -217,20 +257,9 @@ public class AdminController {
         return ResponseEntity.ok(ApiResponse.success(dtoPage, "Lấy danh sách người dùng thành công"));
     }
 
-    @PostMapping("/users/{id}/status")
-    public ResponseEntity<ApiResponse<Object>> updateUserStatus(@PathVariable Integer id, @RequestParam String status) {
-        try {
-            User user = userRepository.findById(id)
-                    .orElseThrow(() -> new RuntimeException("Không tìm thấy người dùng"));
-            user.setStatus(User.Status.valueOf(status));
-            userRepository.save(user);
-            return ResponseEntity.ok(ApiResponse.success(null, "Cập nhật trạng thái người dùng thành công"));
-        } catch (Exception e) {
-            return ResponseEntity.status(HttpStatus.BAD_REQUEST)
-                    .body(ApiResponse.error("Lỗi: " + e.getMessage()));
-        }
-    }
-
+    /**
+     * Cập nhật vai trò (Role) cho người dùng (Phân quyền).
+     */
     @PostMapping("/users/{id}/roles")
     public ResponseEntity<ApiResponse<Object>> updateUserRoles(@PathVariable Integer id,
             @RequestBody Set<String> roleNames) {
@@ -255,7 +284,9 @@ public class AdminController {
         }
     }
 
-    // Locations (Branches) CRUD
+    /**
+     * Quản lý các chi nhánh (Locations) của hệ thống cho thuê xe.
+     */
     @GetMapping("/locations")
     public ResponseEntity<ApiResponse<Page<LocationDTO>>> allLocations(
             @RequestParam(defaultValue = "0") int page,
@@ -269,6 +300,9 @@ public class AdminController {
         return ResponseEntity.ok(ApiResponse.success(locations, "Lấy danh sách chi nhánh thành công"));
     }
 
+    /**
+     * Thêm mới một chi nhánh.
+     */
     @PostMapping("/locations")
     public ResponseEntity<ApiResponse<LocationDTO>> createLocation(@RequestBody LocationDTO dto) {
         com.rental.entity.Location location = com.rental.entity.Location.builder()
@@ -279,29 +313,12 @@ public class AdminController {
                 .build();
         com.rental.entity.Location saved = locationRepository.save(location);
         LocationDTO result = convertToLocationDTO(saved);
-
-        URI locationUri = ServletUriComponentsBuilder.fromCurrentRequest()
-                .path("/{id}")
-                .buildAndExpand(saved.getLocationId())
-                .toUri();
-
-        return ResponseEntity.created(locationUri)
-                .body(ApiResponse.created(result, "Thêm chi nhánh mới thành công"));
+        return ResponseEntity.ok(ApiResponse.success(result, "Thêm chi nhánh mới thành công"));
     }
 
-    @PutMapping("/locations/{id}")
-    public ResponseEntity<ApiResponse<LocationDTO>> updateLocation(@PathVariable Integer id,
-            @RequestBody LocationDTO dto) {
-        com.rental.entity.Location location = locationRepository.findById(id)
-                .orElseThrow(() -> new RuntimeException("Không tìm thấy chi nhánh"));
-        location.setBranchName(dto.getBranchName());
-        location.setAddress(dto.getAddress());
-        location.setCity(dto.getCity());
-        location.setPhone(dto.getPhone());
-        com.rental.entity.Location saved = locationRepository.save(location);
-        return ResponseEntity.ok(ApiResponse.success(convertToLocationDTO(saved), "Cập nhật chi nhánh thành công"));
-    }
-
+    /**
+     * Xóa chi nhánh (Chỉ xóa được nếu không còn xe nào thuộc chi nhánh đó).
+     */
     @DeleteMapping("/locations/{id}")
     public ResponseEntity<ApiResponse<Object>> deleteLocation(@PathVariable Integer id) {
         try {
@@ -309,159 +326,27 @@ public class AdminController {
             return ResponseEntity.ok(ApiResponse.success(null, "Xóa chi nhánh thành công!"));
         } catch (DataIntegrityViolationException e) {
             return ResponseEntity.status(HttpStatus.CONFLICT)
-                    .body(ApiResponse.error("Không thể xóa chi nhánh này vì đang có các xe thuộc về chi nhánh này."));
+                    .body(ApiResponse.error("Không thể xóa chi nhánh vì còn dữ liệu xe liên quan."));
         } catch (Exception e) {
             return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR)
-                    .body(ApiResponse.error("Lỗi khi xóa chi nhánh: " + e.getMessage()));
+                    .body(ApiResponse.error("Lỗi khi xóa: " + e.getMessage()));
         }
     }
 
-    // Brands CRUD
-    @GetMapping("/brands")
-    public ResponseEntity<ApiResponse<Page<BrandDTO>>> allBrands(
-            @RequestParam(defaultValue = "0") int page,
-            @RequestParam(defaultValue = "10") int size,
-            @RequestParam(defaultValue = "asc") String sortDir) {
-        Sort sort = sortDir.equalsIgnoreCase("desc") ? Sort.by("brandId").descending() : Sort.by("brandId").ascending();
-        Pageable pageable = PageRequest.of(page, size, sort);
-        Page<BrandDTO> brands = brandRepository.findAll(pageable)
-                .map(b -> BrandDTO.builder().brandId(b.getBrandId()).brandName(b.getBrandName()).build());
-        return ResponseEntity.ok(ApiResponse.success(brands, "Lấy danh sách hãng xe thành công"));
-    }
-
-    @PostMapping("/brands")
-    public ResponseEntity<ApiResponse<Brand>> createBrand(@RequestBody Brand brand) {
-        Brand saved = brandRepository.save(brand);
-        URI location = ServletUriComponentsBuilder.fromCurrentRequest()
-                .path("/{id}")
-                .buildAndExpand(saved.getBrandId())
-                .toUri();
-        return ResponseEntity.created(location)
-                .body(ApiResponse.created(saved, "Thêm hãng xe thành công"));
-    }
-
-    @PutMapping("/brands/{id}")
-    public ResponseEntity<ApiResponse<Brand>> updateBrand(@PathVariable Integer id, @RequestBody Brand brand) {
-        brand.setBrandId(id);
-        Brand saved = brandRepository.save(brand);
-        return ResponseEntity.ok(ApiResponse.success(saved, "Cập nhật hãng xe thành công"));
-    }
-
-    @DeleteMapping("/brands/{id}")
-    public ResponseEntity<ApiResponse<Object>> deleteBrand(@PathVariable Integer id) {
-        try {
-            brandRepository.deleteById(id);
-            return ResponseEntity.ok(ApiResponse.success(null, "Xóa hãng xe thành công!"));
-        } catch (DataIntegrityViolationException e) {
-            return ResponseEntity.status(HttpStatus.CONFLICT)
-                    .body(ApiResponse.error("Không thể xóa hãng xe này vì đang có các mẫu xe hoặc xe liên quan."));
-        } catch (Exception e) {
-            return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR)
-                    .body(ApiResponse.error("Lỗi khi xóa hãng xe: " + e.getMessage()));
-        }
-    }
-
-    // Models CRUD
-    @GetMapping("/models")
-    public ResponseEntity<ApiResponse<Page<ModelDTO>>> allModels(
-            @RequestParam(defaultValue = "0") int page,
-            @RequestParam(defaultValue = "10") int size,
-            @RequestParam(defaultValue = "asc") String sortDir) {
-        Sort sort = sortDir.equalsIgnoreCase("desc") ? Sort.by("modelId").descending() : Sort.by("modelId").ascending();
-        Pageable pageable = PageRequest.of(page, size, sort);
-        Page<ModelDTO> models = modelRepository.findAll(pageable)
-                .map(m -> ModelDTO.builder()
-                        .modelId(m.getModelId())
-                        .modelName(m.getModelName())
-                        .brandId(m.getBrand().getBrandId())
-                        .brandName(m.getBrand().getBrandName())
-                        .build());
-        return ResponseEntity.ok(ApiResponse.success(models, "Lấy danh sách mẫu xe thành công"));
-    }
-
-    @PostMapping("/models")
-    public ResponseEntity<ApiResponse<Model>> createModel(@RequestBody ModelDTO dto) {
-        Brand brand = vehicleService.getBrandById(dto.getBrandId());
-        Model saved = modelRepository.save(Model.builder()
-                .modelName(dto.getModelName())
-                .brand(brand)
-                .build());
-        URI location = ServletUriComponentsBuilder.fromCurrentRequest()
-                .path("/{id}")
-                .buildAndExpand(saved.getModelId())
-                .toUri();
-        return ResponseEntity.created(location)
-                .body(ApiResponse.created(saved, "Thêm mẫu xe thành công"));
-    }
-
-    @PutMapping("/models/{id}")
-    public ResponseEntity<ApiResponse<Model>> updateModel(@PathVariable Integer id, @RequestBody ModelDTO dto) {
-        Brand brand = vehicleService.getBrandById(dto.getBrandId());
-        Model saved = modelRepository.save(Model.builder()
-                .modelId(id)
-                .modelName(dto.getModelName())
-                .brand(brand)
-                .build());
-        return ResponseEntity.ok(ApiResponse.success(saved, "Cập nhật mẫu xe thành công"));
-    }
-
-    @DeleteMapping("/models/{id}")
-    public ResponseEntity<ApiResponse<Object>> deleteModel(@PathVariable Integer id) {
-        try {
-            modelRepository.deleteById(id);
-            return ResponseEntity.ok(ApiResponse.success(null, "Xóa mẫu xe thành công!"));
-        } catch (DataIntegrityViolationException e) {
-            return ResponseEntity.status(HttpStatus.CONFLICT)
-                    .body(ApiResponse
-                            .error("Không thể xóa mẫu xe này vì đang có các xe liên quan đang sử dụng mẫu này."));
-        } catch (Exception e) {
-            return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR)
-                    .body(ApiResponse.error("Lỗi khi xóa mẫu xe: " + e.getMessage()));
-        }
-    }
-
+    /**
+     * Thêm mới xe vào danh mục quản lý.
+     */
     @PostMapping("/vehicles")
     public ResponseEntity<ApiResponse<VehicleDTO>> createVehicle(@RequestBody VehicleDTO dto) {
         Vehicle vehicle = mapToEntity(dto);
         Vehicle saved = vehicleService.save(vehicle);
         VehicleDTO result = convertToVehicleDTO(saved);
-        URI location = ServletUriComponentsBuilder.fromCurrentRequest()
-                .path("/{id}")
-                .buildAndExpand(saved.getVehicleId())
-                .toUri();
-        return ResponseEntity.created(location)
-                .body(ApiResponse.created(result, "Thêm xe mới thành công"));
+        return ResponseEntity.ok(ApiResponse.success(result, "Thêm xe mới thành công"));
     }
 
-    @PutMapping("/vehicles/{id}")
-    public ResponseEntity<ApiResponse<VehicleDTO>> updateVehicle(@PathVariable Integer id,
-            @RequestBody VehicleDTO dto) {
-        dto.setVehicleId(id);
-        Vehicle updated = mapToEntity(dto);
-        Vehicle saved = vehicleService.save(updated);
-        return ResponseEntity.ok(ApiResponse.success(convertToVehicleDTO(saved), "Cập nhật thông tin xe thành công"));
-    }
-
-    @DeleteMapping("/vehicles/{id}")
-    public ResponseEntity<ApiResponse<Object>> deleteVehicle(@PathVariable Integer id) {
-        try {
-            Vehicle v = vehicleService.getById(id);
-            // Delete all associated images from storage
-            for (VehicleImage img : v.getImages()) {
-                fileService.deleteFile(img.getImageUrl());
-            }
-            vehicleService.deleteById(id);
-            return ResponseEntity.ok(ApiResponse.success(null, "Xóa xe thành công!"));
-        } catch (DataIntegrityViolationException e) {
-            return ResponseEntity.status(HttpStatus.CONFLICT)
-                    .body(ApiResponse.error(
-                            "Không thể xóa xe này vì đang có các lịch đặt xe (Booking) hoặc lịch sử liên quan."));
-        } catch (Exception e) {
-            return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR)
-                    .body(ApiResponse.error("Lỗi khi xóa xe: " + e.getMessage()));
-        }
-    }
-
+    /**
+     * Lưu trữ ảnh của xe lên server thông qua FileService.
+     */
     @PostMapping("/vehicles/{id}/images")
     public ResponseEntity<ApiResponse<Object>> uploadImages(@PathVariable Integer id,
             @RequestParam("files") MultipartFile[] files) {
@@ -472,7 +357,7 @@ public class AdminController {
                 VehicleImage img = VehicleImage.builder()
                         .vehicle(vehicle)
                         .imageUrl(url)
-                        .isPrimary(vehicle.getImages().isEmpty()) // First image is primary
+                        .isPrimary(vehicle.getImages().isEmpty())
                         .build();
                 vehicleImageRepository.save(img);
             }
@@ -483,195 +368,60 @@ public class AdminController {
         }
     }
 
-    @DeleteMapping("/vehicles/images/{imageId}")
-    public ResponseEntity<ApiResponse<Object>> deleteImage(@PathVariable Integer imageId) {
-        try {
-            VehicleImage img = vehicleImageRepository.findById(imageId)
-                    .orElseThrow(() -> new RuntimeException("Không tìm thấy ảnh"));
-            fileService.deleteFile(img.getImageUrl());
-            vehicleImageRepository.delete(img);
-            return ResponseEntity.ok(ApiResponse.success(null, "Đã xóa ảnh!"));
-        } catch (Exception e) {
-            return ResponseEntity.status(HttpStatus.BAD_REQUEST)
-                    .body(ApiResponse.error("Lỗi xóa ảnh: " + e.getMessage()));
-        }
-    }
-
-    @PutMapping("/vehicles/images/{imageId}/primary")
-    public ResponseEntity<ApiResponse<Object>> setPrimaryImage(@PathVariable Integer imageId) {
-        try {
-            VehicleImage img = vehicleImageRepository.findById(imageId)
-                    .orElseThrow(() -> new RuntimeException("Không tìm thấy ảnh"));
-
-            // Unset other primary images for this vehicle
-            List<VehicleImage> images = vehicleImageRepository.findByVehicle(img.getVehicle());
-            for (VehicleImage i : images) {
-                i.setIsPrimary(i.getImageId().equals(imageId));
-            }
-            vehicleImageRepository.saveAll(images);
-            return ResponseEntity.ok(ApiResponse.success(null, "Đã đặt làm ảnh chính!"));
-        } catch (Exception e) {
-            return ResponseEntity.status(HttpStatus.BAD_REQUEST)
-                    .body(ApiResponse.error("Lỗi: " + e.getMessage()));
-        }
-    }
-
-    private Vehicle mapToEntity(VehicleDTO dto) {
-        Vehicle v = (dto.getVehicleId() != null) ? vehicleService.getById(dto.getVehicleId()) : new Vehicle();
-        v.setLicensePlate(dto.getLicensePlate());
-
-        if (dto.getModelId() != null && dto.getModelId() > 0) {
-            v.setModel(vehicleService.getModelById(dto.getModelId()));
-        } else if (v.getModel() == null) {
-            throw new RuntimeException("Vui lòng chọn mẫu xe hợp lệ");
-        }
-
-        v.setManufactureYear(dto.getYear() != null ? dto.getYear()
-                : (dto.getManufactureYear() != null ? dto.getManufactureYear() : 2023));
-        v.setMileage(dto.getMileage() != null ? dto.getMileage() : 0);
-        v.setLastMaintenanceMileage(dto.getLastMaintenanceMileage() != null ? dto.getLastMaintenanceMileage() : 0);
-
-        java.math.BigDecimal price = dto.getDailyRate() != null ? dto.getDailyRate() : dto.getPricePerDay();
-        if (price == null || price.compareTo(java.math.BigDecimal.ZERO) <= 0) {
-            throw new RuntimeException("Giá thuê mỗi ngày phải lớn hơn 0");
-        }
-        v.setPricePerDay(price);
-
-        v.setDepositAmount(dto.getDepositAmount() != null ? dto.getDepositAmount()
-                : (v.getDepositAmount() != null ? v.getDepositAmount() : java.math.BigDecimal.ZERO));
-
-        v.setSeats(dto.getSeats() != null ? dto.getSeats() : 4);
-        v.setFuelType(dto.getFuel() != null ? dto.getFuel() : (dto.getFuelType() != null ? dto.getFuelType() : "Xăng"));
-        v.setTransmission(dto.getTransmission() != null ? dto.getTransmission() : "Tự động");
-        v.setEngineCapacity(dto.getEngineCapacity());
-
-        if (dto.getVehicleId() == null) {
-            v.setStatus(Vehicle.Status.Available);
-        }
-
-        if (dto.getType() != null) {
-            v.setType(dto.getType());
-        } else if (v.getType() == null) {
-            v.setType("Xe Ô Tô");
-        }
-
-        if (dto.getLocationId() != null && dto.getLocationId() > 0) {
-            v.setCurrentLocation(vehicleService.getLocationById(dto.getLocationId()));
-        }
-
-        return v;
-    }
+    // --- CÁC PHƯƠNG THỨC TRỢ GIÚP (HELPER METHODS) ---
 
     private BookingDTO convertToBookingDTO(Booking booking) {
         BookingDTO dto = new BookingDTO();
         dto.setBookingId(booking.getBookingId());
         dto.setVehicleId(booking.getVehicle().getVehicleId());
-        dto.setVehicleModel(booking.getVehicle().getName());
+        dto.setVehicleModel(booking.getVehicle().getFullName());
         dto.setCustomerName(booking.getCustomer().getName());
         dto.setCustomerPhone(booking.getCustomer().getPhone());
-        dto.setCustomerEmail(booking.getCustomer().getEmail());
         dto.setStartDate(booking.getStartDate());
         dto.setEndDate(booking.getEndDate());
         dto.setTotalPrice(booking.getTotalPrice());
         dto.setStatus(booking.getStatus());
-        dto.setReturnMileage(booking.getReturnMileage());
-        dto.setReturnNote(booking.getReturnNote());
-
         dto.setPickupLocationName(booking.getPickupAddress());
         dto.setReturnLocationName(booking.getReturnAddress());
-
         return dto;
     }
 
     private VehicleDTO convertToVehicleDTO(Vehicle vehicle) {
         VehicleDTO dto = new VehicleDTO();
         dto.setId(vehicle.getVehicleId());
-        dto.setVehicleId(vehicle.getVehicleId());
         dto.setLicensePlate(vehicle.getLicensePlate());
-
-        // Dynamic name generation
-        dto.setName(vehicle.getName());
-        dto.setModelName(vehicle.getModelName());
-        dto.setBrandName(vehicle.getBrandName());
-        dto.setModel(vehicle.getModelName()); // For compatibility
-        dto.setBrand(vehicle.getBrandName()); // For compatibility
-
-        if (vehicle.getModel() != null) {
-            dto.setModelId(vehicle.getModel().getModelId());
-        }
-
-        dto.setManufactureYear(vehicle.getManufactureYear());
-        dto.setYear(vehicle.getManufactureYear());
-        dto.setMileage(vehicle.getMileage());
-        dto.setLastMaintenanceMileage(vehicle.getLastMaintenanceMileage());
+        dto.setName(vehicle.getFullName());
         dto.setPricePerDay(vehicle.getPricePerDay());
-        dto.setDailyRate(vehicle.getPricePerDay());
-        dto.setDepositAmount(vehicle.getDepositAmount());
         dto.setStatus(vehicle.getStatus());
-        dto.setAverageRating(vehicle.getAverageRating());
-
-        if (vehicle.getType() != null) {
-            dto.setType(vehicle.getType());
-        }
-
         if (vehicle.getCurrentLocation() != null) {
-            dto.setLocationId(vehicle.getCurrentLocation().getLocationId());
-            dto.setLocation(vehicle.getCurrentLocation().getBranchName());
             dto.setLocationName(vehicle.getCurrentLocation().getBranchName());
         }
-
-        dto.setSeats(vehicle.getSeats());
-        dto.setFuelType(vehicle.getFuelType());
-        dto.setFuel(vehicle.getFuelType());
-        dto.setEngineCapacity(vehicle.getEngineCapacity());
-        dto.setTransmission(vehicle.getTransmission());
-
-        if (vehicle.getImages() != null && !vehicle.getImages().isEmpty()) {
-            List<VehicleImageDTO> imgDTOs = vehicle.getImages().stream()
-                    .map(img -> VehicleImageDTO.builder()
-                            .imageId(img.getImageId())
-                            .imageUrl(img.getImageUrl())
-                            .isPrimary(img.getIsPrimary())
-                            .build())
-                    .collect(Collectors.toList());
-            dto.setImages(imgDTOs);
-
-            // Set primary image URL for main display
-            String primaryUrl = imgDTOs.stream()
-                    .filter(VehicleImageDTO::getIsPrimary)
-                    .map(VehicleImageDTO::getImageUrl)
-                    .findFirst()
-                    .orElse(imgDTOs.get(0).getImageUrl());
-            dto.setImage(primaryUrl);
-        } else {
-            dto.setImage("/images/car-toyota-camry.webp");
-        }
-
         return dto;
+    }
+
+    private UserDTO convertToUserDTO(User user) {
+        return UserDTO.builder()
+                .userId(user.getUserId())
+                .username(user.getUsername())
+                .fullName(user.getFullName())
+                .email(user.getEmail())
+                .status(user.getStatus().name())
+                .roles(user.getRoles().stream().map(Role::getName).collect(Collectors.toSet()))
+                .build();
     }
 
     private CustomerDTO convertToCustomerDTO(Customer customer) {
-        if (customer == null)
-            return null;
         CustomerDTO dto = new CustomerDTO();
         dto.setUserId(customer.getUserId());
         dto.setCustomerId(customer.getUserId());
-
-        User u = customer.getUser();
-        if (u != null) {
-            dto.setName(u.getFullName());
-            dto.setFullName(u.getFullName());
-            dto.setEmail(u.getEmail());
-            dto.setPhone(u.getPhone());
-        } else {
-            dto.setName("N/A");
-            dto.setFullName("Chưa cập nhật");
-        }
-
+        dto.setFullName(customer.getName());
+        dto.setName(customer.getName());
+        dto.setEmail(customer.getEmail());
+        dto.setPhone(customer.getPhone());
         dto.setIdentityCard(customer.getIdentityCard());
-
         return dto;
     }
+
 
     private LocationDTO convertToLocationDTO(com.rental.entity.Location location) {
         LocationDTO dto = new LocationDTO();
@@ -680,53 +430,21 @@ public class AdminController {
         dto.setAddress(location.getAddress());
         dto.setCity(location.getCity());
         dto.setPhone(location.getPhone());
-
-        // Count vehicles in this location
         dto.setVehicleCount(vehicleRepository.countByCurrentLocationLocationId(location.getLocationId()));
-
         return dto;
     }
 
-    private UserDTO convertToUserDTO(User user) {
-        Set<String> roleNames = resolveRoleNames(user);
-        return UserDTO.builder()
-                .userId(user.getUserId())
-                .username(user.getUsername())
-                .fullName(user.getFullName())
-                .email(user.getEmail())
-                .phone(user.getPhone())
-                .status(user.getStatus().name())
-                .createdAt(user.getCreatedAt())
-                .dateOfBirth(user.getDateOfBirth())
-                .address(user.getAddress())
-                .roles(roleNames)
-                .build();
+    private Vehicle mapToEntity(VehicleDTO dto) {
+        Vehicle v = (dto.getVehicleId() != null) ? vehicleService.getById(dto.getVehicleId()) : new Vehicle();
+        v.setLicensePlate(dto.getLicensePlate());
+        if (dto.getModelId() != null)
+            v.setModel(vehicleService.getModelById(dto.getModelId()));
+        v.setManufactureYear(dto.getYear() != null ? dto.getYear() : 2023);
+        v.setPricePerDay(dto.getDailyRate() != null ? dto.getDailyRate() : BigDecimal.ZERO);
+        v.setSeats(dto.getSeats() != null ? dto.getSeats() : 4);
+        v.setStatus(Vehicle.Status.Available);
+        if (dto.getLocationId() != null)
+            v.setCurrentLocation(vehicleService.getLocationById(dto.getLocationId()));
+        return v;
     }
-
-        private Set<String> resolveRoleNames(User user) {
-        Set<String> roleNames = user.getRoles() == null
-            ? java.util.Collections.emptySet()
-            : user.getRoles().stream()
-                .map(Role::getName)
-                .filter(name -> name != null && !name.isBlank())
-                .map(name -> name.startsWith("ROLE_") ? name.substring(5) : name)
-                .map(String::toUpperCase)
-                .collect(Collectors.toCollection(java.util.LinkedHashSet::new));
-
-        if (!roleNames.isEmpty()) {
-            return roleNames;
-        }
-
-        Set<String> fallbackRoleNames = userRepository.findRoleNamesByUserId(user.getUserId()).stream()
-            .filter(name -> name != null && !name.isBlank())
-            .map(name -> name.startsWith("ROLE_") ? name.substring(5) : name)
-            .map(String::toUpperCase)
-            .collect(Collectors.toCollection(java.util.LinkedHashSet::new));
-
-        if (!fallbackRoleNames.isEmpty()) {
-            return fallbackRoleNames;
-        }
-
-        return java.util.Set.of("CUSTOMER");
-        }
 }

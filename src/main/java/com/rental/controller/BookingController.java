@@ -4,16 +4,19 @@ import com.rental.dto.ApiResponse;
 import com.rental.dto.BookingDTO;
 import com.rental.entity.Booking;
 import com.rental.entity.Customer;
-import com.rental.dto.BookingDTO;
 import com.rental.dto.BookingRequestDTO;
 import com.rental.service.BookingService;
 import com.rental.service.CustomerService;
 import com.rental.service.VehicleService;
 import com.rental.entity.DriverLicense;
 import com.rental.entity.Vehicle;
+import com.rental.license.LicenseValidationService;
+import com.rental.payment.PaymentAdapter;
+import com.rental.payment.PaymentAdapterRegistry;
+import com.rental.payment.PaymentRequest;
+import com.rental.payment.PaymentResult;
 import com.rental.repository.DriverLicenseRepository;
 import lombok.RequiredArgsConstructor;
-import java.time.LocalDate;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.data.domain.Page;
@@ -26,10 +29,18 @@ import org.springframework.web.servlet.support.ServletUriComponentsBuilder;
 import java.net.URI;
 import java.math.BigDecimal;
 import jakarta.servlet.http.HttpServletRequest;
-import com.rental.service.VnPayService;
-import com.rental.repository.PaymentRepository;
-import com.rental.entity.Payment;
 
+/**
+ * Controller xử lý các yêu cầu liên quan đến Đặt xe (Booking) dành cho đối tượng Khách hàng.
+ * 
+ * Class này đóng vai trò là tầng Giao diện API (Presentation Layer), tiếp nhận các yêu cầu
+ * khởi tạo đơn đặt xe, truy vấn lịch sử thuê xe và xử lý các xác nhận thanh toán điện tử.
+ * 
+ * Các công nghệ tích hợp chính:
+ * - Spring Security: Xác thực người dùng qua JWT.
+ * - VNPAY: Cổng thanh toán điện tử thẻ nội địa/quốc tế.
+ * - VietQR: Tự động sinh mã QR chuyển khoản ngân hàng theo tiêu chuẩn Napas247.
+ */
 @RestController
 @RequestMapping("/api/bookings")
 @RequiredArgsConstructor
@@ -39,26 +50,57 @@ public class BookingController {
     private final VehicleService vehicleService;
     private final CustomerService customerService;
     private final DriverLicenseRepository driverLicenseRepository;
-    private final VnPayService vnPayService;
-    private final PaymentRepository paymentRepository;
+    private final LicenseValidationService licenseValidationService;
+    private final PaymentAdapterRegistry paymentAdapterRegistry;
 
+    /**
+     * Lấy thông tin chi tiết của một đơn đặt xe cụ thể dựa trên ID.
+     * @param id Mã định danh duy nhất của đơn hàng (Primary Key).
+     * @return Đối tượng ApiResponse chứa dữ liệu BookingDTO đã được chuẩn hóa.
+     */
     @GetMapping("/{id}")
     public ResponseEntity<ApiResponse<BookingDTO>> getBookingById(@PathVariable Integer id) {
         Booking booking = bookingService.getById(id);
         return ResponseEntity.ok(ApiResponse.success(convertToDTO(booking), "Lấy thông tin đơn đặt xe thành công"));
     }
 
+    /**
+     * Truy vấn danh sách tất cả các đơn đặt xe thuộc quyền sở hữu của người dùng đang đăng nhập.
+     * Kết quả được phân trang để tối ưu hóa hiệu năng truyền tải dữ liệu.
+     * 
+     * @param pageable Tham số phân trang (mặc định 50 phần tử/trang).
+     * @param authentication Đối tượng chứa thông tin định danh của người dùng từ Security Context.
+     */
     @GetMapping("/my-bookings")
     public ResponseEntity<ApiResponse<Page<BookingDTO>>> myBookings(
             @PageableDefault(size = 50) Pageable pageable,
             Authentication authentication) {
+        // Tìm đối tượng khách hàng (Customer) dựa trên Username/Email trích xuất từ JWT
         Customer customer = customerService.findByIdentifier(authentication.getName());
+        
+        // Truy vấn dữ liệu từ Service và thực hiện ánh xạ (mapping) sang DTO
         Page<BookingDTO> bookings = bookingService.getBookingsByCustomer(customer.getCustomerId(), pageable)
                 .map(this::convertToDTO);
+                
         return ResponseEntity.ok(ApiResponse.success(bookings, "Lấy danh sách lịch thuê của bạn thành công"));
     }
 
-
+    /**
+     * Nghiệp vụ quan trọng nhất: Khởi tạo một đơn đặt xe mới cho một phương tiện.
+     * 
+     * Quy trình xử lý (Business Workflow):
+     * 1. Xác thực thông tin Khách hàng và Phương tiện.
+     * 2. KIỂM TRA ĐIỀU KIỆN GPLX: Đây là tính năng đặc thù của XeNow, tự động áp dụng
+     *    luật giao thông đường bộ Việt Nam (bao gồm cả thay đổi hạng bằng lái từ 01/01/2025).
+     * 3. Kiểm tra tính sẵn sàng của xe (Overlap check) thông qua Service.
+     * 4. Tính toán giá trị đơn hàng, tiền cọc và lưu trạng thái PENDING.
+     * 5. Khởi tạo giao dịch thanh toán điện tử (VNPAY hoặc VietQR) tùy theo lựa chọn của khách.
+     * 
+     * @param vehicleId ID của xe khách muốn thuê.
+     * @param request DTO chứa thông tin ngày thuê, địa điểm và phương thức thanh toán.
+     * @param authentication Thông tin người đặt.
+     * @param httpRequest Đối tượng request để lấy IP người dùng phục vụ cho VNPAY.
+     */
     @SuppressWarnings("null")
     @PostMapping("/create/{vehicleId}")
     public ResponseEntity<ApiResponse<BookingDTO>> createBooking(
@@ -67,181 +109,99 @@ public class BookingController {
             Authentication authentication,
             HttpServletRequest httpRequest) {
         try {
+            // Lấy thông tin thực thể từ Database
             Customer customer = customerService.findByIdentifier(authentication.getName());
             Vehicle vehicle = vehicleService.getById(vehicleId);
             
-            // --- VALIDATION RULE CHO GPLX ---
+            // --- GIAI ĐOẠN 1: KIỂM TRA TÍNH HỢP LỆ CỦA GIẤY PHÉP LÁI XE (GPLX) ---
+            // Đảm bảo khách hàng đã chọn ít nhất một GPLX đã định danh trên hệ thống
             if (request.getDriverLicenseId() == null) {
-                throw new RuntimeException("Vui lòng chọn Giấy phép lái xe");
+                throw new RuntimeException("Vui lòng chọn Giấy phép lái xe để tiếp tục");
             }
             
             DriverLicense dl = driverLicenseRepository.findById(request.getDriverLicenseId())
-                .orElseThrow(() -> new RuntimeException("Không tìm thấy thông tin Giấy phép lái xe"));
+                .orElseThrow(() -> new RuntimeException("Không tìm thấy dữ liệu Giấy phép lái xe trong hệ thống"));
 
+            // Ràng buộc bảo mật: GPLX phải thuộc về tài khoản đang thực hiện giao dịch
             if (!dl.getCustomer().getUserId().equals(customer.getUserId())) {
-                throw new RuntimeException("Giấy phép lái xe không hợp lệ");
+                throw new RuntimeException("Phát hiện hành vi gian lận: GPLX không thuộc về tài khoản này");
             }
 
-            if (dl.getExpiryDate() != null && dl.getExpiryDate().isBefore(LocalDate.now())) {
-                throw new RuntimeException("Giấy phép lái xe đã hết hạn");
-            }
-
-            String licenseClass = dl.getLicenseClass() != null ? dl.getLicenseClass().toUpperCase() : "";
-            LocalDate issueDate = dl.getIssueDate();
-            if (issueDate == null) {
-                throw new RuntimeException("Giấy phép lái xe thiếu ngày cấp");
-            }
+            licenseValidationService.validate(dl, vehicle);
+            // --- KẾT THÚC GIAI ĐOẠN KIỂM TRA GPLX ---
             
-            boolean isOldLaw = issueDate.isBefore(LocalDate.of(2025, 1, 1));
-            boolean isValid = false;
-            
-            String vType = vehicle.getType() != null ? vehicle.getType() : "Xe Ô Tô";
-            if (vType.toLowerCase().contains("xe số") || vType.toLowerCase().contains("tay ga")) {
-                int capacity = vehicle.getEngineCapacity() != null ? vehicle.getEngineCapacity() : 110;
-                if (isOldLaw) {
-                    if (capacity < 175) {
-                        isValid = licenseClass.equals("A1") || licenseClass.equals("A2");
-                    } else {
-                        isValid = licenseClass.equals("A2");
-                    }
-                } else {
-                    if (capacity <= 125) {
-                        isValid = licenseClass.equals("A1") || licenseClass.equals("A");
-                    } else {
-                        isValid = licenseClass.equals("A");
-                    }
-                }
-            } else {
-                // Ô Tô
-                int seats = vehicle.getSeats() != null ? vehicle.getSeats() : 4;
-                if (seats <= 9) {
-                    if (isOldLaw) {
-                        isValid = licenseClass.equals("B1") || licenseClass.equals("B2") || 
-                                  licenseClass.equals("C") || licenseClass.equals("D") || licenseClass.equals("E");
-                    } else {
-                        isValid = licenseClass.equals("B") || licenseClass.equals("C1") || 
-                                  licenseClass.equals("C") || licenseClass.equals("D") || licenseClass.equals("D1") || licenseClass.equals("D2");
-                    }
-                } else if (seats <= 30) {
-                    if (isOldLaw) {
-                        isValid = licenseClass.equals("D") || licenseClass.equals("E");
-                    } else {
-                        isValid = licenseClass.equals("D1") || licenseClass.equals("D2") || licenseClass.equals("D");
-                    }
-                } else {
-                    isValid = licenseClass.equals("E"); // Mới không có E, nhưng fallback
-                }
-            }
-
-            if (!isValid) {
-                String errorMsg = String.format("GPLX hạng %s không đủ điều kiện thuê phương tiện này theo quy định (cấp %s). Vui lòng chọn GPLX phù hợp.", 
-                                                dl.getLicenseClass(), isOldLaw ? "trước năm 2025" : "từ năm 2025");
-                throw new RuntimeException(errorMsg);
-            }
-            // --- END VALIDATION ---
-            
+            // GIAI ĐOẠN 2: KHỞI TẠO ĐƠN HÀNG TRỰC TIẾP
             Booking booking = new Booking();
             booking.setCustomer(customer);
             booking.setVehicle(vehicle);
             booking.setStartDate(request.getStartDate());
             booking.setEndDate(request.getEndDate());
-            
             booking.setPickupAddress(request.getPickupAddress());
             booking.setReturnAddress(request.getReturnAddress());
             
+            // Gọi Service để xử lý nghiệp vụ lưu trữ và kiểm tra lịch trống xe (Conflict validation)
             Booking saved = bookingService.createBooking(booking);
             BookingDTO dto = convertToDTO(saved);
             
-            String paymentUrl = null;
-            String vietQrUrl = null;
+            PaymentResult paymentResult = PaymentResult.empty();
             
+            // GIAI ĐOẠN 3: XỬ LÝ THANH TOÁN (PAYMENT GATEWAY INTEGRATION)
             if (request.getPaymentAmount() != null && request.getPaymentAmount().compareTo(BigDecimal.ZERO) > 0) {
-                Payment payment = new Payment();
-                payment.setBooking(saved);
-                payment.setAmount(request.getPaymentAmount());
-                
-                String pm = request.getPaymentMethod();
-                if ("Thẻ tín dụng".equalsIgnoreCase(pm) || "VNPAY".equalsIgnoreCase(pm)) {
-                    payment.setPaymentMethod(Payment.Method.CreditCard);
-                    payment.setStatus(Payment.Status.Pending);
-                    paymentRepository.save(payment);
-                    
-                    // Optimize length to ensure QR works on all banking apps (limit ~40-50 chars)
-                    String shortName = vehicle.getModelName();
-                    if (shortName != null && shortName.length() > 20) {
-                        shortName = shortName.substring(0, 20).trim();
-                    }
-                    // Remove accents for VietQR description safety using a simple regex replace or Normalizer
-                    String rawInfo = "Xe " + shortName + " " + (vehicle.getLicensePlate() != null ? vehicle.getLicensePlate().toUpperCase() : "");
-                    String paymentInfo = java.text.Normalizer.normalize(rawInfo, java.text.Normalizer.Form.NFD)
-                                            .replaceAll("\\p{M}", "").replaceAll("[^a-zA-Z0-9 ]", "");
-                                            
-                    String orderInfo = paymentInfo;
-                    paymentUrl = vnPayService.createPaymentUrl(httpRequest, request.getPaymentAmount(), orderInfo, String.valueOf(payment.getPaymentId()));
-                } else if ("Chuyển khoản VietQR".equalsIgnoreCase(pm) || "Chuyển khoản".equalsIgnoreCase(pm)) {
-                    payment.setPaymentMethod(Payment.Method.BankTransfer);
-                    payment.setStatus(Payment.Status.Pending);
-                    paymentRepository.save(payment);
-                    
-                    String bankBin = "970436"; // Vietcombank Sandbox
-                    String accountNo = "1040489156"; 
-                    String template = "compact";
-                    
-                    String shortName = vehicle.getModelName();
-                    if (shortName != null && shortName.length() > 20) {
-                        shortName = shortName.substring(0, 20).trim();
-                    }
-                    String rawInfo = "Thanh toan dat xe " + shortName + " " + (vehicle.getLicensePlate() != null ? vehicle.getLicensePlate().toUpperCase() : "");
-                    String addInfo = java.text.Normalizer.normalize(rawInfo, java.text.Normalizer.Form.NFD)
-                                            .replaceAll("\\p{M}", "").replaceAll("[^a-zA-Z0-9 ]", "");
-
-                    String encodedAddInfo = "";
-                    try {
-                        encodedAddInfo = java.net.URLEncoder.encode(addInfo, "UTF-8").replace("+", "%20");
-                    } catch (Exception e) {
-                        encodedAddInfo = addInfo.replace(" ", "%20");
-                    }
-                    vietQrUrl = String.format("https://img.vietqr.io/image/%s-%s-%s.png?amount=%s&addInfo=%s&accountName=Nguyen%%20Nhat%%20Thien", 
-                                              bankBin, accountNo, template, request.getPaymentAmount().toString(), encodedAddInfo);
-                } else if ("Tiền mặt".equalsIgnoreCase(pm)) {
-                    payment.setPaymentMethod(Payment.Method.Cash);
-                    payment.setStatus(Payment.Status.Pending);
-                    paymentRepository.save(payment);
-                }
+                PaymentAdapter adapter = paymentAdapterRegistry.getAdapter(request.getPaymentMethod());
+                paymentResult = adapter.createPayment(new PaymentRequest(
+                        saved,
+                        vehicle,
+                        request.getPaymentAmount(),
+                        request.getPaymentMethod(),
+                        httpRequest));
             }
 
-            dto.setPaymentUrl(paymentUrl);
-            dto.setVietQrUrl(vietQrUrl);
+            // Gán thông tin thanh toán vào DTO phản hồi để Frontend hiển thị QR hoặc nút bấm chuyển hướng
+            dto.setPaymentUrl(paymentResult.paymentUrl());
+            dto.setVietQrUrl(paymentResult.vietQrUrl());
             
+            // Xây dựng Header Location theo chuẩn RESTful API
             URI location = ServletUriComponentsBuilder.fromCurrentRequest()
                     .path("/{id}")
                     .buildAndExpand(saved.getBookingId())
                     .toUri();
             
             return ResponseEntity.created(location)
-                    .body(ApiResponse.created(dto, "Đặt xe thành công!"));
+                    .body(ApiResponse.created(dto, "Khởi tạo đơn đặt xe thành công! Vui lòng hoàn tất thanh toán (nếu có)."));
         } catch (Exception e) {
-            e.printStackTrace(); // Log the error for internal context
-            return ResponseEntity.badRequest().body(ApiResponse.error("Lỗi tạo đơn đặt xe: " + e.getMessage()));
+            e.printStackTrace(); 
+            return ResponseEntity.badRequest().body(ApiResponse.error("Thất bại khi khởi tạo đơn hàng: " + e.getMessage()));
         }
     }
 
+    /**
+     * Xác thực trạng thái thanh toán và cập nhật đơn hàng thành công.
+     * Thường được gọi sau khi hệ thống nhận được tín hiệu Webhook/IPN từ phía ngân hàng.
+     * 
+     * @param id Mã định danh đơn hàng cần xác nhận.
+     * @return Kết quả cập nhật trạng thái mới.
+     */
     @PostMapping("/{id}/confirm-payment")
     public ResponseEntity<ApiResponse<BookingDTO>> confirmPayment(@PathVariable Integer id) {
         try {
+            // Cập nhật trạng thái đơn sang Confirmed (Đã xác nhận)
             Booking booking = bookingService.updateStatus(id, Booking.Status.Confirmed);
-            return ResponseEntity.ok(ApiResponse.success(convertToDTO(booking), "Thanh toán thành công"));
+            return ResponseEntity.ok(ApiResponse.success(convertToDTO(booking), "Xác nhận thanh toán và duyệt đơn thành công!"));
         } catch (Exception e) {
             return ResponseEntity.status(HttpStatus.BAD_REQUEST)
-                    .body(ApiResponse.error("Đặt xe thất bại: " + e.getMessage()));
+                    .body(ApiResponse.error("Lỗi xác nhận thanh toán: " + e.getMessage()));
         }
     }
 
+    /**
+     * Phương thức nội bộ (Helper) để chuyển đổi thực thể Database sang đối tượng truyền tải dữ liệu.
+     * Giúp ẩn đi các trường thông tin nhạy cảm và định dạng lại dữ liệu cho phù hợp với Frontend.
+     */
     private BookingDTO convertToDTO(Booking booking) {
         BookingDTO dto = new BookingDTO();
         dto.setBookingId(booking.getBookingId());
         dto.setVehicleId(booking.getVehicle().getVehicleId());
-        dto.setVehicleModel(booking.getVehicle().getName());
+        dto.setVehicleModel(booking.getVehicle().getFullName()); // Trả về tên đầy đủ gồm: Hãng + Dòng xe + Năm sản xuất
         dto.setCustomerName(booking.getCustomer().getName());
         dto.setStartDate(booking.getStartDate());
         dto.setEndDate(booking.getEndDate());
@@ -254,3 +214,4 @@ public class BookingController {
         return dto;
     }
 }
+
